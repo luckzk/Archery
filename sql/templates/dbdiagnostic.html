@@ -19,6 +19,9 @@
         <li id="trxandlocks_tab">
             <a href="#trxandlocks" role="tab" data-toggle="tab">锁信息</a>
         </li>
+        <li id="pubsub_tab">
+            <a href="#pubsub" role="tab" data-toggle="tab">发布订阅</a>
+        </li>
         <div class="form-inline pull-right">
             <div class="form-group ">
                 <select id="instance_name" class="form-control selectpicker" name="instance_name_list"
@@ -69,6 +72,7 @@
                    style="table-layout:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             </table>
         </div>
+        {% include "dbdiagnostic/pubsub_tab.html" %}
     </div>
     <!-- 配置信息确认 -->
     <div class="modal fade" id="killComfirm">
@@ -99,13 +103,16 @@
     <script src="{% static 'bootstrap-table/js/bootstrap-table-export.min.js' %}"></script>
     <script src="{% static 'bootstrap-table/js/tableExport.min.js' %}"></script>
     <script src="{% static 'dbdiagnostic/js/db_info.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/pubsub.js' %}"></script>
     <script>
 
         var processListColumns  = [];
         var tablespaceListColumns = [];
         var lockListColumns = [];
+        var pubsubListColumns = [];
         var processListDetailFormatCallback = NaN;
         var lockListDetailFormatCallback = NaN;
+        var pubsubListDetailFormatCallback = NaN;
 
         // get_process_list函数表格的格式化信息
         // 0.数据库类型； 1.类型过滤； 2.字段映射；  3.详细信息的处理函数
@@ -514,6 +521,139 @@
         // 0.数据库类型； 1.字段映射，2.详细信息的处理函数
         let lockListTableInfos = [
             [
+                'pgsql',
+                [{
+                    title: '等待PID',
+                    field: 'waiting_pid',
+                    sortable: true
+                }, {
+                    title: '阻塞PID',
+                    field: 'blocking_pid',
+                    sortable: true
+                }, {
+                    title: '阻塞链',
+                    field: 'blocking_chain',
+                    sortable: true
+                }, {
+                    title: '数据库',
+                    field: 'database_name',
+                    sortable: true
+                }, {
+                    title: '等待用户',
+                    field: 'waiting_user',
+                    sortable: true
+                }, {
+                    title: '阻塞用户',
+                    field: 'blocking_user',
+                    sortable: true
+                }, {
+                    title: '等待状态',
+                    field: 'waiting_state',
+                    sortable: true
+                }, {
+                    title: '阻塞状态',
+                    field: 'blocking_state',
+                    sortable: true
+                }, {
+                    title: '等待事件类型',
+                    field: 'wait_event_type',
+                    sortable: true
+                }, {
+                    title: '等待事件',
+                    field: 'wait_event',
+                    sortable: true
+                }, {
+                    title: '锁类型',
+                    field: 'lock_type',
+                    sortable: true
+                }, {
+                    title: '等待锁模式',
+                    field: 'waiting_lock_mode',
+                    sortable: true
+                }, {
+                    title: '阻塞锁模式',
+                    field: 'blocking_lock_mode',
+                    sortable: true
+                }, {
+                    title: '锁对象',
+                    field: 'lock_object',
+                    sortable: true
+                }, {
+                    title: '等待时长(秒)',
+                    field: 'waiting_duration_seconds',
+                    sortable: true
+                }, {
+                    title: '等待事务开始时间',
+                    field: 'waiting_xact_start',
+                    sortable: true
+                }, {
+                    title: '等待查询开始时间',
+                    field: 'waiting_query_start',
+                    sortable: true
+                }, {
+                    title: '阻塞事务开始时间',
+                    field: 'blocking_xact_start',
+                    sortable: true
+                }, {
+                    title: '阻塞查询开始时间',
+                    field: 'blocking_query_start',
+                    sortable: true
+                }, {
+                    title: '等待应用',
+                    field: 'waiting_application',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '阻塞应用',
+                    field: 'blocking_application',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '等待客户端',
+                    field: 'waiting_client_addr',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '阻塞客户端',
+                    field: 'blocking_client_addr',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '等待SQL',
+                    field: 'waiting_query',
+                    formatter: function (value, row, index) {
+                        return truncateText(value, 40);
+                    }
+                }, {
+                    title: '完整等待SQL',
+                    field: 'waiting_query',
+                    visible: false
+                }, {
+                    title: '阻塞SQL',
+                    field: 'blocking_query',
+                    formatter: function (value, row, index) {
+                        return truncateText(value, 40);
+                    }
+                }, {
+                    title: '完整阻塞SQL',
+                    field: 'blocking_query',
+                    visible: false
+                }],
+                function (index, row) {
+                    var html = [];
+                    if (row.waiting_query) {
+                        html.push('<h5>等待SQL</h5><span>' + formatSqlText(row.waiting_query) + '</span>');
+                    }
+                    if (row.blocking_query) {
+                        html.push('<h5>阻塞SQL</h5><span>' + formatSqlText(row.blocking_query) + '</span>');
+                    }
+                    if (row.blocking_chain) {
+                        html.push('<h5>阻塞链</h5><span>' + row.blocking_chain + '</span>');
+                    }
+                    return html.join('');
+                }
+            ],
+            [
                 'mysql',
                 [{
                     title: '等待的状态',
@@ -682,7 +822,6 @@
             }
         }
 
-
         //点击终止会话按钮弹出确认框,并且构建终止会话请求
         $(function () {
             $("#kill_process").click(function () {
@@ -848,6 +987,8 @@
                         get_space_list();
                     } else if (active_li_id === 'trxandlocks_tab') {
                         get_trxandlocks_list();
+                    } else if (active_li_id === 'pubsub_tab') {
+                        get_pubsub_list();
                     } else if (active_li_id === 'trx_tab') {
                         get_trx_list();
                     }
@@ -885,6 +1026,12 @@
                     lockListDetailFormatCallback = lockListTableInfo[2];
                 }
             })
+            pubsubListTableInfos.forEach((pubsubListTableInfo,i) =>{
+                if (pubsubListTableInfo[0] === db_type) {
+                    pubsubListColumns = pubsubListTableInfo[1];
+                    pubsubListDetailFormatCallback = pubsubListTableInfo[2];
+                }
+            })
             
             // console.log(command_types);
             for (let i = 0; i < command_types.length; i++) {
@@ -903,6 +1050,8 @@
                 get_space_list();
             } else if (active_li_id === 'trxandlocks_tab') {
                 get_trxandlocks_list();
+            } else if (active_li_id === 'pubsub_tab') {
+                get_pubsub_list();
             } else if (active_li_id === 'trx_tab') {
                 get_trx_list();
             }

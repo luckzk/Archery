@@ -32,6 +32,7 @@ from .models import (
     AuditEntry,
     TwoFactorAuthConfig,
     PgSQLMetricDefinition,
+    DBDiagnosticSQLTemplate,
 )
 
 from sql.form import TunnelForm, InstanceForm
@@ -146,6 +147,53 @@ class PgSQLMetricDefinitionAdmin(admin.ModelAdmin):
             {
                 "fields": ("sql", "db_name", "value_column", "timeout_ms", "instances"),
                 "description": "输入：页面选择 PostgreSQL 实例，系统在该实例上执行单条 SELECT；采集数据库为空时使用实例默认库。输出：建议返回 value 列作为指标值，也可以通过取值字段指定其他列。",
+            },
+        ),
+    )
+
+
+# DB诊断会话管理自定义SQL
+@admin.register(DBDiagnosticSQLTemplate)
+class DBDiagnosticSQLTemplateAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "db_type",
+        "diagnostic_type",
+        "template_name",
+        "enabled",
+        "db_name",
+        "timeout_ms",
+        "update_time",
+    )
+    list_display_links = ("id", "template_name")
+    search_fields = ("template_name", "description", "sql")
+    list_filter = ("db_type", "diagnostic_type", "enabled")
+    fieldsets = (
+        (
+            "基础信息",
+            {
+                "fields": (
+                    "db_type",
+                    "diagnostic_type",
+                    "template_name",
+                    "description",
+                    "enabled",
+                ),
+                "description": "当前用于 /dbdiagnostic/ 会话管理页面，支持 PgSQL 进程状态、PgSQL 锁信息和 PgSQL 发布订阅。",
+            },
+        ),
+        (
+            "SQL",
+            {
+                "fields": ("sql", "db_name", "timeout_ms"),
+                "description": "只允许单条 SELECT。PgSQL进程状态 SQL 可包含 $state_not_idle$ 占位符，页面选择 Not Idle 时会替换为状态过滤条件。",
+            },
+        ),
+        (
+            "输出字段约定",
+            {
+                "fields": (),
+                "description": "PgSQL进程状态字段需匹配 pgsqlDiagnosticInfo.fieldsProcesslist；PgSQL锁信息字段需匹配 dbdiagnostic.html 中 pgsql 锁信息列，如 waiting_pid、blocking_pid、blocking_chain、waiting_query、blocking_query；PgSQL发布订阅字段需返回 object_type、object_name、enabled、owner_name、database_name。",
             },
         ),
     )

@@ -20,5 +20,12 @@ src/docker-compose-dev
 .coverage
 archery_custom
 static/
+!common/static/
+common/static/*
+!common/static/dbdiagnostic/
+common/static/dbdiagnostic/*
+!common/static/dbdiagnostic/js/
+common/static/dbdiagnostic/js/*
+!common/static/dbdiagnostic/js/pubsub.js
 local_settings.py
 nohup.out

@@ -1,9 +1,13 @@
 import json
 from datetime import timedelta, datetime
 from unittest.mock import MagicMock, patch, Mock, ANY
-from pytest_mock import MockerFixture
+try:
+    from pytest_mock import MockerFixture
+except ImportError:
+    MockerFixture = object
 
 import sqlparse
+from django.core.exceptions import ValidationError
 from django.contrib.auth import get_user_model
 from django.test import TestCase
 
@@ -19,6 +23,7 @@ from sql.engines.clickhouse import ClickHouseEngine
 from sql.engines.odps import ODPSEngine
 from sql.models import (
     DataMaskingColumns,
+    DBDiagnosticSQLTemplate,
     Instance,
     SqlWorkflow,
     SqlWorkflowContent,
@@ -406,8 +411,12 @@ class TestPgSQL(TestCase):
         cls.ins.save()
         cls.sys_config = SysConfig()
 
+    def tearDown(self):
+        DBDiagnosticSQLTemplate.objects.all().delete()
+
     @classmethod
     def tearDownClass(cls):
+        DBDiagnosticSQLTemplate.objects.all().delete()
         cls.ins.delete()
         cls.sys_config.purge()
 
@@ -721,6 +730,125 @@ class TestPgSQL(TestCase):
             self.assertEqual(
                 execute_result.rows[0].__dict__.keys(), row.__dict__.keys()
             )
+
+    def test_dbdiagnostic_template_rejects_non_pgsql_and_write_sql(self):
+        template = DBDiagnosticSQLTemplate(
+            db_type="mysql",
+            diagnostic_type="pgsql_processlist",
+            template_name="bad",
+            sql="update t set id = 1",
+        )
+
+        with self.assertRaises(ValidationError) as context:
+            template.full_clean()
+
+        self.assertIn("db_type", context.exception.message_dict)
+        self.assertIn("sql", context.exception.message_dict)
+
+    def test_dbdiagnostic_validate_select_sql_accepts_cte(self):
+        ok, message, safe_sql = DBDiagnosticSQLTemplate.validate_select_sql(
+            "WITH RECURSIVE x AS (SELECT 1 AS id) SELECT id FROM x;"
+        )
+
+        self.assertTrue(ok)
+        self.assertEqual(message, "")
+        self.assertEqual(
+            safe_sql, "WITH RECURSIVE x AS (SELECT 1 AS id) SELECT id FROM x"
+        )
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_processlist_uses_custom_template_and_not_idle_replacement(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_processlist",
+            template_name="process custom",
+            sql="SELECT 1 AS pid, 'postgres' AS datname, 'u' AS usename, 'active' AS state, 'select 1' AS query WHERE 1=1 $state_not_idle$",
+            db_name="archery",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=["pid", "datname", "usename", "state", "query"],
+            rows=[(1, "postgres", "u", "active", "select 1")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.processlist(command_type="Not Idle")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "archery")
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("and psa.state<>'idle'", call_kwargs["sql"])
+        self.assertNotIn("$state_not_idle$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_dbdiagnostic_sql_reports_missing_required_columns(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_processlist",
+            template_name="missing columns",
+            sql="SELECT 1 AS pid",
+        )
+        mock_query.return_value = ResultSet(column_list=["pid"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.processlist(command_type="All")
+
+        self.assertEqual(
+            result.error, "自定义SQL缺少必要输出字段：datname, usename, state, query"
+        )
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_trxandlocks_uses_pgsql_diagnostic_sql(self, mock_query):
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "waiting_pid",
+                "blocking_pid",
+                "blocking_chain",
+                "waiting_query",
+                "blocking_query",
+            ],
+            rows=[(1, 2, "1 -> 2", "update t", "select t")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.trxandlocks()
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        self.assertIn("WITH RECURSIVE lock_edges", mock_query.call_args.kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_pubsub_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_pubsub",
+            template_name="pubsub custom",
+            sql="SELECT 'publication' AS object_type, 'pub1' AS object_name, 'true' AS enabled, 'u' AS owner_name, 'postgres' AS database_name",
+            db_name="postgres",
+            timeout_ms=2345,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "object_type",
+                "object_name",
+                "enabled",
+                "owner_name",
+                "database_name",
+            ],
+            rows=[("publication", "pub1", "true", "u", "postgres")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.pubsub()
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 2345)
+        self.assertIn("pub1", call_kwargs["sql"])
 
     @patch("psycopg2.connect")
     def test_processlist_not_idle(self, mock_connect):

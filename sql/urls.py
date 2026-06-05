@@ -169,6 +169,7 @@ urlpatterns = [
     path("db_diagnostic/kill_session/", db_diagnostic.kill_session),
     path("db_diagnostic/tablespace/", db_diagnostic.tablespace),
     path("db_diagnostic/trxandlocks/", db_diagnostic.trxandlocks),
+    path("db_diagnostic/pubsub/", db_diagnostic.pubsub),
     path("db_diagnostic/innodb_trx/", db_diagnostic.innodb_trx),
     path("archive/list/", archiver.archive_list),
     path("archive/apply/", archiver.archive_apply),

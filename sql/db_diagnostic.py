@@ -171,6 +171,8 @@ def trxandlocks(request):
     query_engine = get_engine(instance=instance)
     if instance.db_type == "mysql":
         query_result = query_engine.trxandlocks()
+    elif instance.db_type == "pgsql":
+        query_result = query_engine.trxandlocks()
     elif instance.db_type == "oracle":
         query_result = query_engine.lock_info()
     else:
@@ -188,6 +190,40 @@ def trxandlocks(request):
         result = {"status": 1, "msg": query_result.error}
 
     # 返回查询结果
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL发布订阅
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pubsub(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的发布订阅查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.pubsub()
+
+    if not query_result.error:
+        pubsub = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": pubsub}
+    else:
+        result = {"status": 1, "msg": query_result.error}
+
     return HttpResponse(
         json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
         content_type="application/json",

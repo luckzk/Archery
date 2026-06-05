@@ -3,6 +3,9 @@ import importlib
 import logging
 from typing import Optional
 
+import sqlparse
+from django.core.exceptions import ValidationError
+
 from django.db import models
 from django.contrib.auth.models import AbstractUser
 from mirage import fields
@@ -369,6 +372,84 @@ class PgSQLParamQuery(models.Model):
         verbose_name = "PostgreSQL参数展示SQL"
         verbose_name_plural = "PostgreSQL参数展示SQL"
 
+
+
+class DBDiagnosticSQLTemplate(models.Model):
+    """
+    数据库会话管理诊断自定义SQL
+    """
+
+    DIAGNOSTIC_TYPE_CHOICES = (
+        ("pgsql_processlist", "PgSQL进程状态"),
+        ("pgsql_trxandlocks", "PgSQL锁信息"),
+        ("pgsql_pubsub", "PgSQL发布订阅"),
+    )
+
+    db_type = models.CharField("数据库类型", max_length=20, choices=DB_TYPE_CHOICES)
+    diagnostic_type = models.CharField(
+        "诊断分区", max_length=50, choices=DIAGNOSTIC_TYPE_CHOICES
+    )
+    template_name = models.CharField("配置名称", max_length=100)
+    description = models.TextField("配置说明", default="", blank=True)
+    sql = models.TextField(
+        "SQL",
+        help_text="只允许单条 SELECT。PgSQL进程状态可使用 $state_not_idle$ 占位符，选择 Not Idle 时会替换为状态过滤条件。",
+    )
+    db_name = models.CharField(
+        "查询数据库",
+        max_length=64,
+        default="",
+        blank=True,
+        help_text="为空时使用 postgres。",
+    )
+    enabled = models.BooleanField("是否启用", default=True)
+    timeout_ms = models.PositiveIntegerField("SQL超时毫秒", default=3000)
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return f"{self.get_diagnostic_type_display()} - {self.template_name}"
+
+    @classmethod
+    def validate_select_sql(cls, sql):
+        raw_sql = (sql or "").strip()
+        if not raw_sql:
+            return False, "SQL不能为空", ""
+
+        formatted_sql = sqlparse.format(raw_sql, strip_comments=True).strip()
+        statements = [
+            statement.strip()
+            for statement in sqlparse.split(formatted_sql)
+            if statement.strip()
+        ]
+        if len(statements) != 1:
+            return False, "只允许单条SELECT语句", ""
+
+        parsed_statements = sqlparse.parse(statements[0])
+        if not parsed_statements or parsed_statements[0].get_type() != "SELECT":
+            return False, "只允许SELECT查询", ""
+
+        return True, "", statements[0].rstrip(";")
+
+    def clean(self):
+        super().clean()
+        errors = {}
+        if self.db_type and self.db_type != "pgsql":
+            errors["db_type"] = "当前DB诊断自定义SQL仅支持PgSQL。"
+
+        ok, message, _ = self.validate_select_sql(self.sql)
+        if not ok:
+            errors["sql"] = message
+
+        if errors:
+            raise ValidationError(errors)
+
+    class Meta:
+        managed = True
+        db_table = "dbdiagnostic_sql_template"
+        unique_together = ("db_type", "diagnostic_type", "template_name")
+        verbose_name = "DB诊断自定义SQL"
+        verbose_name_plural = "DB诊断自定义SQL"
 
 
 SQL_WORKFLOW_CHOICES = (
