@@ -55,8 +55,16 @@
     <script src="{% static 'bootstrap-table/js/tableExport.min.js' %}"></script>
     <script src="{% static 'sql-formatter/sql-formatter.min.js' %}"></script>
     <script>
+        function selected_db_type() {
+            return $("#instance option:selected").data("db-type") || "";
+        }
+
         function get_param_list() {
-            $("#editable-div").show();
+            if (selected_db_type() === "pgsql") {
+                $("#editable-div").hide();
+            } else {
+                $("#editable-div").show();
+            }
             if ($("#instance").val()) {
                 //初始化table
                 $('#param-list').bootstrapTable('destroy').bootstrapTable({
@@ -95,7 +103,7 @@
                     queryParams: function (params) {
                         return {
                             search: params.search,
-                            editable: $("#editable").val(),
+                            editable: selected_db_type() === "pgsql" ? "" : $("#editable").val(),
                             instance_id: $("#instance").val()
                         }
                     },
@@ -258,7 +266,7 @@
                         url: "/group/user_all_instances/",
                         dataType: "json",
                         data: {
-                            db_type: ['mysql', 'inception', 'goinception']
+                            db_type: ['mysql', 'pgsql', 'inception', 'goinception']
                         },
                         complete: function () {
                             //如果已选择实例，进入页面自动填充，并且重置激活id
@@ -273,7 +281,7 @@
                                 let result = data['data'];
                                 $("#instance").empty();
                                 for (let i = 0; i < result.length; i++) {
-                                    let instance = "<option value=\"" + result[i]['id'] + "\">" + result[i]['instance_name'] + "</option>";
+                                    let instance = "<option value=\"" + result[i]['id'] + "\" data-db-type=\"" + result[i]['db_type'] + "\">" + result[i]['instance_name'] + "</option>";
                                     $("#instance").append(instance);
                                 }
                                 $('#instance').selectpicker('render');

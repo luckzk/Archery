@@ -13,6 +13,7 @@ from django.views.decorators.cache import cache_page
 from common.utils.extend_json_encoder import ExtendJSONEncoder
 from common.utils.convert import Convert
 from sql.engines import get_engine
+from sql.utils.pgsql_params import query_pgsql_params_for_instance
 from sql.plugins.schemasync import SchemaSync
 from sql.utils.sql_utils import filter_db_list
 from .models import Instance, ParamTemplate, ParamHistory
@@ -87,6 +88,17 @@ def param_list(request):
     except Instance.DoesNotExist:
         result = {"status": 1, "msg": "实例不存在", "data": []}
         return HttpResponse(json.dumps(result), content_type="application/json")
+    if ins.db_type == "pgsql":
+        try:
+            rows = query_pgsql_params_for_instance(ins, search=search, editable=editable)
+        except Exception as e:
+            result = {"status": 1, "msg": str(e), "data": []}
+            return HttpResponse(json.dumps(result), content_type="application/json")
+        return HttpResponse(
+            json.dumps(rows, cls=ExtendJSONEncoder, bigint_as_string=True),
+            content_type="application/json",
+        )
+
     # 获取已配置参数列表
     cnf_params = dict()
     for param in ParamTemplate.objects.filter(

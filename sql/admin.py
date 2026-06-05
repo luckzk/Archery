@@ -1,6 +1,8 @@
 # -*- coding: UTF-8 -*-
 from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin
+from django.http import JsonResponse
+from django.urls import path
 
 # Register your models here.
 from django.forms import PasswordInput
@@ -29,9 +31,11 @@ from .models import (
     Tunnel,
     AuditEntry,
     TwoFactorAuthConfig,
+    PgSQLMetricDefinition,
 )
 
 from sql.form import TunnelForm, InstanceForm
+from sql.engines import get_engine
 
 
 # 用户管理
@@ -115,6 +119,38 @@ class UsersAdmin(UserAdmin):
     list_filter = ("is_staff", "is_superuser", "is_active", "groups", "resource_group")
 
 
+# PostgreSQL实时指标定义
+@admin.register(PgSQLMetricDefinition)
+class PgSQLMetricDefinitionAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "metric_key",
+        "metric_name",
+        "enabled",
+        "db_name",
+        "value_column",
+        "timeout_ms",
+        "update_time",
+    )
+    list_display_links = ("id", "metric_key")
+    search_fields = ("metric_key", "metric_name", "description", "sql")
+    list_filter = ("enabled", "instances")
+    filter_horizontal = ("instances",)
+    fieldsets = (
+        (
+            "基础信息",
+            {"fields": ("metric_key", "metric_name", "description", "enabled")},
+        ),
+        (
+            "SQL约定",
+            {
+                "fields": ("sql", "db_name", "value_column", "timeout_ms", "instances"),
+                "description": "输入：页面选择 PostgreSQL 实例，系统在该实例上执行单条 SELECT；采集数据库为空时使用实例默认库。输出：建议返回 value 列作为指标值，也可以通过取值字段指定其他列。",
+            },
+        ),
+    )
+
+
 # 用户2fa管理
 @admin.register(TwoFactorAuthConfig)
 class TwoFactorAuthConfigAdmin(admin.ModelAdmin):
@@ -165,6 +201,7 @@ class InstanceTagAdmin(admin.ModelAdmin):
 @admin.register(Instance)
 class InstanceAdmin(admin.ModelAdmin):
     form = InstanceForm
+    change_form_template = "admin/sql/instance/change_form.html"
     list_display = (
         "id",
         "instance_name",
@@ -194,6 +231,65 @@ class InstanceAdmin(admin.ModelAdmin):
     )
 
     inlines = [AliRdsConfigInline]
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path(
+                "test-pgsql-connection/",
+                self.admin_site.admin_view(self.test_pgsql_connection),
+                name="sql_instance_test_pgsql_connection",
+            ),
+        ]
+        return custom_urls + urls
+
+    def test_pgsql_connection(self, request):
+        if request.method != "POST":
+            return JsonResponse({"status": 1, "msg": "仅支持POST请求"})
+
+        if request.POST.get("db_type") != "pgsql":
+            return JsonResponse({"status": 1, "msg": "当前仅支持测试PgSQL实例连接"})
+
+        instance = Instance(
+            instance_name=request.POST.get("instance_name") or "admin-pgsql-test",
+            type=request.POST.get("type") or "master",
+            db_type="pgsql",
+            mode=request.POST.get("mode") or "",
+            host=request.POST.get("host") or "",
+            port=request.POST.get("port") or 0,
+            user=request.POST.get("user") or "",
+            password=request.POST.get("password") or "",
+            db_name=request.POST.get("db_name") or "",
+            charset=request.POST.get("charset") or "",
+            is_ssl=request.POST.get("is_ssl") == "on",
+            verify_ssl=request.POST.get("verify_ssl") == "on",
+        )
+
+        tunnel_id = request.POST.get("tunnel")
+        if tunnel_id:
+            instance.tunnel_id = tunnel_id
+
+        cursor = None
+        try:
+            engine = get_engine(instance=instance)
+            conn = engine.get_connection()
+            cursor = conn.cursor()
+            cursor.execute("SELECT 1")
+        except Exception as e:
+            return JsonResponse({"status": 1, "msg": f"无法连接实例：\n{str(e)}"})
+        finally:
+            if cursor:
+                try:
+                    cursor.close()
+                except Exception:
+                    pass
+            if "engine" in locals() and getattr(engine, "conn", None):
+                try:
+                    engine.conn.close()
+                except Exception:
+                    pass
+
+        return JsonResponse({"status": 0, "msg": "连接测试成功"})
 
 
 # SSH隧道
@@ -443,13 +539,54 @@ class ParamTemplateAdmin(admin.ModelAdmin):
     list_display = (
         "variable_name",
         "db_type",
+        "pgsql_query_status",
         "default_value",
         "editable",
         "valid_values",
     )
-    search_fields = ("variable_name",)
-    list_filter = ("db_type", "editable")
+    search_fields = ("variable_name", "description", "param_query_sql")
+    list_filter = ("db_type", "editable", "param_query_enabled")
     list_display_links = ("variable_name",)
+    def pgsql_query_status(self, obj):
+        if obj.db_type != "pgsql" or not obj.param_query_sql:
+            return "-"
+        return "启用" if obj.param_query_enabled else "禁用"
+
+    pgsql_query_status.short_description = "PgSQL SQL状态"
+
+    fieldsets = (
+        (
+            "基础信息",
+            {
+                "fields": (
+                    "db_type",
+                    "variable_name",
+                    "default_value",
+                    "editable",
+                    "valid_values",
+                    "description",
+                ),
+                "description": "MySQL 使用具体参数名匹配实例运行参数；PostgreSQL 的参数名可作为配置名称。",
+                "classes": ("paramtemplate-base-fields",),
+            },
+        ),
+        (
+            "PostgreSQL参数展示SQL",
+            {
+                "fields": (
+                    "param_query_enabled",
+                    "param_query_sql",
+                    "param_query_db_name",
+                    "param_query_timeout_ms",
+                ),
+                "description": "仅数据库类型选择 PgSQL 时使用，保留原 PostgreSQL 参数展示SQL配置方式。可配置多条启用 SQL，/instanceparam/ 会全部执行并合并显示。",
+                "classes": ("paramtemplate-pgsql-query-fields",),
+            },
+        ),
+    )
+
+    class Media:
+        js = ("js/admin_paramtemplate.js",)
 
 
 # 实例参数修改历史

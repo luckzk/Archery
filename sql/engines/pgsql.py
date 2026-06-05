@@ -186,6 +186,7 @@ class PgSQLEngine(EngineBase):
         """返回 ResultSet"""
         schema_name = kwargs.get("schema_name")
         result_set = ResultSet(full_sql=sql)
+        conn = None
         try:
             conn = self.get_connection(db_name=db_name)
             conn.autocommit = False
@@ -237,7 +238,8 @@ class PgSQLEngine(EngineBase):
             result_set.rows = converted_rows
             result_set.affected_rows = len(converted_rows)
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.warning(
                 f"PgSQL命令执行报错，语句：{sql}， 错误信息：{traceback.format_exc()}"
             )
@@ -353,7 +355,8 @@ class PgSQLEngine(EngineBase):
                 line += 1
             conn.commit()
         except Exception as e:
-            conn.rollback()
+            if conn:
+                conn.rollback()
             logger.warning(
                 f"PGSQL命令执行报错，语句：{statement or sql}， 错误信息：{traceback.format_exc()}"
             )

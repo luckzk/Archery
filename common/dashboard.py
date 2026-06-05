@@ -7,6 +7,8 @@ from django.core.exceptions import ValidationError
 
 from sql.models import SqlWorkflow, QueryPrivilegesApply, Users, Instance
 
+from sql.utils.pgsql_metrics import query_pgsql_metrics_for_instance
+from sql.utils.resource_group import user_instances
 from common.utils.chart_dao import ChartDao
 from datetime import date, datetime
 from dateutil.relativedelta import relativedelta
@@ -278,3 +280,54 @@ def gen_stack_chart(data):
         legend_opts=opts.LegendOpts(pos_left="right"),
     )
     return stack_bar
+
+
+@permission_required("sql.menu_dashboard", raise_exception=True)
+def PgSQLMetricStatusPage(request):
+    """PostgreSQL状态面板页面"""
+    return render(request, "pgsql_metric_status.html")
+
+
+@permission_required("sql.menu_dashboard", raise_exception=True)
+def PgSQLMetricInstancesApi(request):
+    """当前用户可见的PostgreSQL实例列表"""
+    instances = user_instances(request.user, db_type=["pgsql"]).order_by("instance_name")
+    data = [
+        {
+            "id": instance.id,
+            "instance_name": instance.instance_name,
+            "host": instance.host,
+            "port": instance.port,
+            "db_name": instance.db_name,
+        }
+        for instance in instances
+    ]
+    return JsonResponse({"status": 0, "msg": "ok", "count": len(data), "data": data})
+
+
+@permission_required("sql.menu_dashboard", raise_exception=True)
+def PgSQLMetricStatusApi(request):
+    """按选择的PostgreSQL实例实时查询指标"""
+    instance_id = request.GET.get("instance_id")
+    if not instance_id:
+        return JsonResponse({"status": 1, "msg": "请选择PostgreSQL实例", "data": []}, status=400)
+
+    try:
+        instance = user_instances(request.user, db_type=["pgsql"]).get(id=instance_id)
+    except (Instance.DoesNotExist, ValueError):
+        return JsonResponse({"status": 1, "msg": "实例不存在或无权限访问", "data": []}, status=404)
+
+    metrics = query_pgsql_metrics_for_instance(instance)
+    success = len([metric for metric in metrics if metric["status"] == "success"])
+    failed = len([metric for metric in metrics if metric["status"] == "failed"])
+    data = {
+        "instance_id": instance.id,
+        "instance_name": instance.instance_name,
+        "host": instance.host,
+        "port": instance.port,
+        "db_name": instance.db_name,
+        "metrics": metrics,
+        "success": success,
+        "failed": failed,
+    }
+    return JsonResponse({"status": 0, "msg": "ok", "count": len(metrics), "data": data})

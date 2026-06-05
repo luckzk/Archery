@@ -61,8 +61,6 @@ def del_schedule(name):
         logger.debug(f"删除schedule：{name}")
     except Schedule.DoesNotExist:
         pass
-
-
 def task_info(name):
     """获取定时任务详情"""
     try:

@@ -1,0 +1,76 @@
+{% extends "admin/change_form.html" %}
+
+{% block submit_buttons_bottom %}
+{{ block.super }}
+<div id="pgsql-test-result" style="display: none; margin-top: 10px; padding: 10px 12px; border-radius: 4px; white-space: pre-wrap;"></div>
+{% endblock %}
+
+{% block extrahead %}
+{{ block.super }}
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  var dbType = document.getElementById("id_db_type");
+  var result = document.getElementById("pgsql-test-result");
+  var form = document.getElementById("instance_form");
+  var submitRow = document.querySelector(".submit-row");
+  var saveButton = submitRow ? submitRow.querySelector('input[name="_save"]') : null;
+
+  if (!dbType || !result || !form || !submitRow || !saveButton) {
+    return;
+  }
+
+  var button = document.createElement("button");
+  button.type = "button";
+  button.id = "test-pgsql-connection";
+  button.className = "button";
+  button.textContent = "测试PgSQL连接";
+  button.style.display = "none";
+  button.style.marginRight = "8px";
+  submitRow.insertBefore(button, saveButton);
+
+  function updatePanelVisibility() {
+    button.style.display = dbType.value === "pgsql" ? "inline-block" : "none";
+  }
+
+  function showResult(ok, message) {
+    result.style.display = "block";
+    result.style.color = ok ? "#155724" : "#721c24";
+    result.style.background = ok ? "#d4edda" : "#f8d7da";
+    result.style.border = ok ? "1px solid #c3e6cb" : "1px solid #f5c6cb";
+    result.textContent = message;
+  }
+
+  dbType.addEventListener("change", updatePanelVisibility);
+  updatePanelVisibility();
+
+  button.addEventListener("click", function () {
+    var formData = new FormData(form);
+    button.textContent = "测试中...";
+    button.disabled = true;
+    result.style.display = "none";
+
+    fetch("{% url 'admin:sql_instance_test_pgsql_connection' %}", {
+      method: "POST",
+      body: formData,
+      credentials: "same-origin",
+      headers: {
+        "X-Requested-With": "XMLHttpRequest"
+      }
+    })
+      .then(function (response) {
+        return response.json();
+      })
+      .then(function (data) {
+        showResult(data.status === 0, data.msg || "连接测试完成");
+      })
+      .catch(function (error) {
+        showResult(false, "连接测试请求失败：\n" + error);
+      })
+      .finally(function () {
+        button.textContent = "测试PgSQL连接";
+        button.disabled = false;
+      });
+  });
+});
+</script>
+{% endblock %}

@@ -274,6 +274,103 @@ class Instance(models.Model, PasswordMixin):
         verbose_name_plural = "实例配置"
 
 
+class PgSQLMetricDefinition(models.Model):
+    """
+    PostgreSQL实时状态指标定义
+    """
+
+    metric_key = models.CharField("指标标识", max_length=100, unique=True)
+    metric_name = models.CharField("指标名称", max_length=100)
+    description = models.TextField(
+        "指标说明",
+        default="",
+        blank=True,
+        help_text="说明指标用途、依赖的 PostgreSQL 视图和权限要求。",
+    )
+    sql = models.TextField(
+        "指标SQL",
+        help_text="只允许单条 SELECT。输入约定：在页面选择的 PostgreSQL 实例上执行，可通过采集数据库指定连接库；不支持页面额外参数。输出约定：返回至少一列，优先取取值字段作为指标值，未配置时取首行首列。",
+    )
+    db_name = models.CharField(
+        "采集数据库",
+        max_length=64,
+        default="",
+        blank=True,
+        help_text="为空时使用实例配置的默认库；实例也未配置时使用 postgres。",
+    )
+    value_column = models.CharField(
+        "取值字段",
+        max_length=100,
+        default="value",
+        blank=True,
+        help_text="建议 SQL 输出 value 列作为指标值；为空或列不存在时取首行首列。",
+    )
+    enabled = models.BooleanField("是否启用", default=True)
+    timeout_ms = models.PositiveIntegerField("SQL超时毫秒", default=3000)
+    instances = models.ManyToManyField(
+        Instance,
+        verbose_name="指定实例",
+        blank=True,
+        help_text="为空时对所有当前用户可见的 PostgreSQL 实例可用。",
+    )
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return self.metric_key
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_metric_definition"
+        verbose_name = "PostgreSQL指标定义"
+        verbose_name_plural = "PostgreSQL指标定义"
+
+
+class PgSQLParamQuery(models.Model):
+    """
+    PostgreSQL实例参数展示SQL配置
+    """
+
+    query_name = models.CharField("配置名称", max_length=100, unique=True)
+    description = models.TextField(
+        "配置说明",
+        default="",
+        blank=True,
+        help_text="说明该参数展示SQL的用途、依赖视图和权限要求。",
+    )
+    sql = models.TextField(
+        "参数展示SQL",
+        help_text="只允许单条 SELECT。输出约定：至少返回 variable_name、runtime_value 两列；可选返回 default_value、valid_values、description。",
+    )
+    db_name = models.CharField(
+        "查询数据库",
+        max_length=64,
+        default="",
+        blank=True,
+        help_text="为空时使用实例配置的默认库；实例也未配置时使用 postgres。",
+    )
+    enabled = models.BooleanField("是否启用", default=True)
+    timeout_ms = models.PositiveIntegerField("SQL超时毫秒", default=3000)
+    instances = models.ManyToManyField(
+        Instance,
+        verbose_name="指定实例",
+        blank=True,
+        help_text="为空时对所有 PostgreSQL 实例可用；配置多条时按排序取第一条匹配配置。",
+    )
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return self.query_name
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_param_query"
+        verbose_name = "PostgreSQL参数展示SQL"
+        verbose_name_plural = "PostgreSQL参数展示SQL"
+
+
+
 SQL_WORKFLOW_CHOICES = (
     ("workflow_finish", _("workflow_finish")),
     ("workflow_abort", _("workflow_abort")),
@@ -785,12 +882,31 @@ class ParamTemplate(models.Model):
 
     db_type = models.CharField("数据库类型", max_length=20, choices=DB_TYPE_CHOICES)
     variable_name = models.CharField("参数名", max_length=64)
-    default_value = models.CharField("默认参数值", max_length=1024)
+    default_value = models.CharField("默认参数值", max_length=1024, default="", blank=True)
     editable = models.BooleanField("是否支持修改", default=False)
     valid_values = models.CharField(
         "有效参数值，范围参数[1-65535]，值参数[ON|OFF]", max_length=1024, blank=True
     )
     description = models.CharField("参数描述", max_length=1024, blank=True)
+    param_query_sql = models.TextField(
+        "PostgreSQL参数展示SQL",
+        default="",
+        blank=True,
+        help_text="仅 db_type=pgsql 时使用。只允许单条 SELECT，至少返回 variable_name、runtime_value 两列；可选返回 default_value、valid_values、description。",
+    )
+    param_query_db_name = models.CharField(
+        "PostgreSQL查询数据库",
+        max_length=64,
+        default="",
+        blank=True,
+        help_text="仅 db_type=pgsql 时使用。为空时使用实例配置的默认库。",
+    )
+    param_query_enabled = models.BooleanField(
+        "启用PostgreSQL参数展示SQL", default=True
+    )
+    param_query_timeout_ms = models.PositiveIntegerField(
+        "PostgreSQL SQL超时毫秒", default=3000
+    )
     create_time = models.DateTimeField("创建时间", auto_now_add=True)
     sys_time = models.DateTimeField("系统时间修改", auto_now=True)
 
