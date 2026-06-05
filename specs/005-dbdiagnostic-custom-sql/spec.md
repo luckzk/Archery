@@ -479,13 +479,13 @@ python -m py_compile sql/models.py sql/admin.py sql/engines/pgsql.py sql/db_diag
 ### Django 系统检查
 
 ```bash
-DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:123456@127.0.0.1:3306/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
+DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:QzLmNpRw%21%40%23S@127.0.0.1:23309/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
 ```
 
 ### 查看配置表
 
 ```bash
-docker exec archery-mysql80 mysql -uroot -p123456 archery -e "SELECT id, db_type, diagnostic_type, template_name, enabled, timeout_ms FROM dbdiagnostic_sql_template ORDER BY id;"
+docker exec archery-mysql80 mysql -uroot -p'QzLmNpRw!@#S' archery -e "SELECT id, db_type, diagnostic_type, template_name, enabled, timeout_ms FROM dbdiagnostic_sql_template ORDER BY id;"
 ```
 
 ### 重启 debug 服务

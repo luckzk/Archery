@@ -272,7 +272,7 @@ src/init_sql/v1.14.0_pgsql_metrics.sql
 系统检查：
 
 ```bash
-DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:123456@127.0.0.1:3306/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
+DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:QzLmNpRw%21%40%23S@127.0.0.1:23309/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
 ```
 
 语法检查示例：

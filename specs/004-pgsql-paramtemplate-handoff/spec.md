@@ -226,13 +226,13 @@ python -m py_compile sql/models.py sql/admin.py sql/utils/pgsql_params.py sql/in
 ### Django 系统检查
 
 ```bash
-DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:123456@127.0.0.1:3306/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
+DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:QzLmNpRw%21%40%23S@127.0.0.1:23309/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py check
 ```
 
 ### 静态文件检查
 
 ```bash
-DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:123456@127.0.0.1:3306/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py findstatic js/admin_paramtemplate.js --verbosity 2
+DEBUG=true SECRET_KEY=dev-debug-secret-dev-debug-secret-123456 DATABASE_URL=mysql://root:QzLmNpRw%21%40%23S@127.0.0.1:23309/archery CACHE_URL=redis://127.0.0.1:6379/0 .venv/bin/python manage.py findstatic js/admin_paramtemplate.js --verbosity 2
 ```
 
 ### 重启 debug 服务
