@@ -26,6 +26,6 @@ common/static/*
 common/static/dbdiagnostic/*
 !common/static/dbdiagnostic/js/
 common/static/dbdiagnostic/js/*
-!common/static/dbdiagnostic/js/pubsub.js
+!common/static/dbdiagnostic/js/*.js
 local_settings.py
 nohup.out

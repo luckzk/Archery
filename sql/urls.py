@@ -184,6 +184,7 @@ urlpatterns = [
     path("db_diagnostic/pgsql_progress/", db_diagnostic.pgsql_progress),
     path("db_diagnostic/pgsql_wait_events/", db_diagnostic.pgsql_wait_events),
     path("db_diagnostic/pgsql_indexes/", db_diagnostic.pgsql_indexes),
+    path("db_diagnostic/pgsql_extensions/", db_diagnostic.pgsql_extensions),
     path("db_diagnostic/innodb_trx/", db_diagnostic.innodb_trx),
     path("archive/list/", archiver.archive_list),
     path("archive/apply/", archiver.archive_apply),

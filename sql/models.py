@@ -391,6 +391,7 @@ class DBDiagnosticSQLTemplate(models.Model):
         ("pgsql_progress", "PgSQL Progress进度"),
         ("pgsql_wait_events", "PgSQL等待事件聚合"),
         ("pgsql_indexes", "PgSQL索引诊断"),
+        ("pgsql_extensions", "PgSQL插件展示"),
     )
 
     db_type = models.CharField("数据库类型", max_length=20, choices=DB_TYPE_CHOICES)

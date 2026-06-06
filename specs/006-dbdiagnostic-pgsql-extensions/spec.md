@@ -540,6 +540,44 @@ PgSQL 尚未补齐：
 - 列定义使用 PgSQL 索引诊断专属字段。
 - 前端逻辑已拆到 `common/static/dbdiagnostic/js/indexes.js`，复用数据库和 Schema 过滤接口，并使用 `/db_diagnostic/pgsql_indexes/` 做服务端分页。
 
+#### 11. PgSQL 插件展示
+
+状态：已实现。
+
+目标：
+
+- 展示当前数据库可用和已安装的 PostgreSQL extension，便于确认 `pg_stat_statements`、`pg_trgm` 等插件状态。
+
+后端实现：
+
+- 新增接口：`/db_diagnostic/pgsql_extensions/`
+- 在 `sql/engines/pgsql.py` 增加 `extension_status()`。
+- 新增诊断类型：`pgsql_extensions`。
+- 默认 SQL 接入 `DBDiagnosticSQLTemplate`，可在 `/admin/sql/dbdiagnosticsqltemplate/` 维护。
+
+查询来源：
+
+- `pg_available_extensions`
+- `pg_extension`
+- `pg_namespace`
+
+建议字段：
+
+| 字段 | 含义 |
+| --- | --- |
+| `extension_name` | 插件名 |
+| `installed` | 是否已安装 |
+| `default_version` | 默认版本 |
+| `installed_version` | 安装版本 |
+| `schema_name` | 安装 schema |
+| `description` | 插件说明 |
+
+前端实现：
+
+- 新增 `sql/templates/dbdiagnostic/extensions_tab.html` include。
+- 前端逻辑拆到 `common/static/dbdiagnostic/js/extensions.js`。
+- 支持数据库过滤，查看不同数据库的 extension 安装状态。
+
 ## 页面设计建议
 
 第一阶段尽量不新增大面积页面结构：
@@ -557,6 +595,7 @@ PgSQL 尚未补齐：
 - Top SQL
 - 等待事件
 - 索引诊断
+- 插件展示
 
 如果 tab 过多，可以后续改为 PgSQL 诊断二级导航，但第一版建议先保持 Bootstrap tab 的现有实现方式，降低改造范围。
 
@@ -590,6 +629,7 @@ Schema 过滤约束：
 | Progress进度子模板 | `sql/templates/dbdiagnostic/progress_tab.html` |
 | 等待事件子模板 | `sql/templates/dbdiagnostic/wait_events_tab.html` |
 | 索引诊断子模板 | `sql/templates/dbdiagnostic/indexes_tab.html` |
+| 插件展示子模板 | `sql/templates/dbdiagnostic/extensions_tab.html` |
 | 前端列定义 | `common/static/dbdiagnostic/js/db_info.js` |
 | 发布订阅前端逻辑 | `common/static/dbdiagnostic/js/pubsub.js` |
 | 复制链路前端逻辑 | `common/static/dbdiagnostic/js/replication.js` |
@@ -597,6 +637,7 @@ Schema 过滤约束：
 | Progress进度前端逻辑 | `common/static/dbdiagnostic/js/progress.js` |
 | 等待事件前端逻辑 | `common/static/dbdiagnostic/js/wait_events.js` |
 | 索引诊断前端逻辑 | `common/static/dbdiagnostic/js/indexes.js` |
+| 插件展示前端逻辑 | `common/static/dbdiagnostic/js/extensions.js` |
 | 接口入口 | `sql/db_diagnostic.py` |
 | 路由 | `sql/urls.py` |
 | PgSQL engine | `sql/engines/pgsql.py` |
@@ -617,6 +658,7 @@ Schema 过滤约束：
 | PgSQL Top SQL | `sql/templates/dbdiagnostic/top_sql_tab.html` |
 | PgSQL 等待事件 | `sql/templates/dbdiagnostic/wait_events_tab.html` |
 | PgSQL 索引诊断 | `sql/templates/dbdiagnostic/indexes_tab.html` |
+| PgSQL 插件展示 | `sql/templates/dbdiagnostic/extensions_tab.html` |
 
 ## 验证计划
 

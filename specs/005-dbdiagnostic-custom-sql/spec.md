@@ -4,7 +4,7 @@
 
 `/dbdiagnostic/` 是 Archery 的会话管理和问题诊断页面，目前包含进程状态、表空间、锁信息、长事务等分区。
 
-本次改动针对 PgSQL 增加了十一类能力：
+本次改动针对 PgSQL 增加了十二类能力：
 
 - PgSQL 进程状态支持后台自定义 SQL。
 - PgSQL 事务信息支持后台自定义 SQL。
@@ -17,6 +17,7 @@
 - PgSQL Progress进度支持后台自定义 SQL，并新增“Progress进度”tab。
 - PgSQL 等待事件聚合支持后台自定义 SQL，并新增“等待事件”tab。
 - PgSQL 索引诊断支持后台自定义 SQL，并新增“索引诊断”tab。
+- PgSQL 插件展示支持后台自定义 SQL，并新增“插件展示”tab。
 
 管理入口放在 Django admin 的 SQL app 下：
 
@@ -50,9 +51,10 @@ pgsql_vacuum          PgSQL Vacuum风险
 pgsql_progress        PgSQL Progress进度
 pgsql_wait_events     PgSQL等待事件聚合
 pgsql_indexes         PgSQL索引诊断
+pgsql_extensions      PgSQL插件展示
 ```
 
-当前本地开发库已写入十一条默认配置：
+当前本地开发库已写入十二条默认配置：
 
 ```text
 pgsql_processlist     PgSQL进程状态默认SQL
@@ -66,6 +68,7 @@ pgsql_vacuum           PgSQL Vacuum风险默认SQL
 pgsql_progress         PgSQL Progress进度默认SQL
 pgsql_wait_events      PgSQL等待事件聚合默认SQL
 pgsql_indexes          PgSQL索引诊断默认SQL
+pgsql_extensions       PgSQL插件展示默认SQL
 ```
 
 这次建表只新增配置表，不会重建库，不会删除已有用户、实例、权限、工单等数据。建表前已按约定备份开发库。
@@ -83,7 +86,7 @@ pgsql_indexes          PgSQL索引诊断默认SQL
 | 字段 | 含义 |
 | --- | --- |
 | `db_type` | 数据库类型，目前主要使用 `pgsql` |
-| `diagnostic_type` | 诊断分区，例如 `pgsql_processlist`、`pgsql_trxandlocks`、`pgsql_pubsub`、`pgsql_replication`、`pgsql_vacuum`、`pgsql_progress`、`pgsql_wait_events`、`pgsql_indexes` |
+| `diagnostic_type` | 诊断分区，例如 `pgsql_processlist`、`pgsql_trxandlocks`、`pgsql_pubsub`、`pgsql_replication`、`pgsql_vacuum`、`pgsql_progress`、`pgsql_wait_events`、`pgsql_indexes`、`pgsql_extensions` |
 | `template_name` | 配置名称 |
 | `description` | 配置说明 |
 | `sql` | 自定义 SQL |
@@ -697,6 +700,69 @@ index_def
 
 前端列定义和加载逻辑在：`common/static/dbdiagnostic/js/indexes.js` 的 `indexesListColumns` 和 `get_pgsql_indexes_list()`。
 
+### PgSQL 插件展示
+
+前端入口：`/dbdiagnostic/` 的插件展示 tab。
+
+请求接口：
+
+```text
+/db_diagnostic/pgsql_extensions/
+```
+
+后端入口：`sql/db_diagnostic.py` 的 `pgsql_extensions()`。
+
+该接口仅支持 PgSQL 实例，调用 `sql/engines/pgsql.py` 的 `extension_status()`。
+
+执行逻辑：
+
+1. 读取启用的后台配置：
+
+```python
+DBDiagnosticSQLTemplate.objects.filter(
+    db_type="pgsql",
+    diagnostic_type="pgsql_extensions",
+    enabled=True,
+).order_by("-update_time", "-id").first()
+```
+
+2. 如果找到配置，使用后台配置的 SQL。
+3. 如果没有配置，回落到代码内置 SQL。
+4. 校验 SQL 必须是单条 `SELECT`。
+5. 执行 SQL。
+6. 校验必要输出字段。
+7. 返回给前端 PgSQL 插件展示表格。
+
+必要输出字段：
+
+```text
+extension_name
+installed
+default_version
+installed_version
+```
+
+完整建议输出字段：
+
+```text
+extension_name
+installed
+default_version
+installed_version
+installed_version_detail
+schema_name
+relocatable
+config_oids
+conditions
+description
+```
+
+默认 SQL 基于 `pg_available_extensions`、`pg_extension`、`pg_namespace`，展示当前数据库可用和已安装 extension。页面支持数据库过滤，用于查看 `pg_stat_statements` 等插件在不同数据库里的安装状态。
+
+前端 HTML 在：`sql/templates/dbdiagnostic/extensions_tab.html`。
+
+前端列定义和加载逻辑在：`common/static/dbdiagnostic/js/extensions.js` 的 `extensionsListColumns` 和 `get_pgsql_extensions_list()`。
+
 ## SQL 校验逻辑
 
 PgSQL engine 中新增了内部方法：
@@ -749,6 +815,7 @@ PgSQL Vacuum风险默认SQL
 PgSQL Progress进度默认SQL
 PgSQL等待事件聚合默认SQL
 PgSQL索引诊断默认SQL
+PgSQL插件展示默认SQL
 ```
 
 如果后台配置被删除或禁用，代码仍会使用内置 SQL 回退，保证页面基本可用。
@@ -894,6 +961,23 @@ reason
 5. 如果需要支持分页和 Schema 过滤，SQL 中保留 `$limit$`、`$offset$`、`$schema_name$` 占位符。
 6. 保存。
 7. 打开 `/dbdiagnostic/` 验证索引诊断 tab。
+
+### 修改 PgSQL 插件展示 SQL
+
+1. 打开 `/admin/sql/dbdiagnosticsqltemplate/`。
+2. 找到 `diagnostic_type=pgsql_extensions` 的配置。
+3. 修改 SQL。
+4. 确保 SQL 返回必要字段：
+
+```text
+extension_name
+installed
+default_version
+installed_version
+```
+
+5. 保存。
+6. 打开 `/dbdiagnostic/` 验证插件展示 tab。
 
 ## 验证方式
 

@@ -569,6 +569,43 @@ def pgsql_indexes(request):
     )
 
 
+# 问题诊断--PgSQL插件展示
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_extensions(request):
+    instance_name = request.POST.get("instance_name")
+    db_name = request.POST.get("db_name", "")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的插件展示查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.extension_status(db_name=db_name)
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "插件展示查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
 # 问题诊断--长事务
 @permission_required("sql.trx_view", raise_exception=True)
 def innodb_trx(request):

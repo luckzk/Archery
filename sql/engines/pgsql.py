@@ -1429,6 +1429,43 @@ ORDER BY
             ],
         )
 
+    def _pgsql_extensions_sql(self):
+        return """
+SELECT
+    available.name AS extension_name,
+    (installed.oid IS NOT NULL) AS installed,
+    available.default_version,
+    available.installed_version,
+    installed.extversion AS installed_version_detail,
+    namespace.nspname AS schema_name,
+    installed.extrelocatable AS relocatable,
+    installed.extconfig::text AS config_oids,
+    installed.extcondition::text AS conditions,
+    available.comment AS description
+FROM pg_available_extensions available
+LEFT JOIN pg_extension installed ON installed.extname = available.name
+LEFT JOIN pg_namespace namespace ON namespace.oid = installed.extnamespace
+ORDER BY
+    (installed.oid IS NOT NULL) DESC,
+    available.name;
+        """
+
+    def extension_status(self, db_name=""):
+        """获取 PostgreSQL 当前数据库可用和已安装插件状态"""
+        return self._query_dbdiagnostic_sql(
+            diagnostic_type="pgsql_extensions",
+            default_sql=self._pgsql_extensions_sql(),
+            db_name=db_name,
+            timeout_ms=3000,
+            required_columns=[
+                "extension_name",
+                "installed",
+                "default_version",
+                "installed_version",
+            ],
+            template_db_name_override=False,
+        )
+
     def processlist(self, command_type, **kwargs):
         """获取连接信息"""
         sql = """

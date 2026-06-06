@@ -970,6 +970,61 @@ class TestPgSQL(TestCase):
         self.assertEqual(call_kwargs["max_execution_time"], 5678)
         self.assertIn("relation", call_kwargs["sql"])
 
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_extension_status_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_extensions",
+            template_name="extension custom",
+            sql="SELECT 'pg_stat_statements' AS extension_name, true AS installed, '1.9' AS default_version, '1.9' AS installed_version",
+            db_name="postgres",
+            timeout_ms=6789,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "extension_name",
+                "installed",
+                "default_version",
+                "installed_version",
+            ],
+            rows=[("pg_stat_statements", True, "1.9", "1.9")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.extension_status()
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 6789)
+        self.assertIn("pg_stat_statements", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_extension_status_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_extensions",
+            template_name="extension custom db",
+            sql="SELECT 'pg_trgm' AS extension_name, true AS installed, '1.6' AS default_version, '1.6' AS installed_version",
+            db_name="postgres",
+            timeout_ms=6789,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "extension_name",
+                "installed",
+                "default_version",
+                "installed_version",
+            ],
+            rows=[("pg_trgm", True, "1.6", "1.6")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.extension_status(db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
     def test_get_cancel_command_uses_pg_cancel_backend(self):
         new_engine = PgSQLEngine(instance=self.ins)
 

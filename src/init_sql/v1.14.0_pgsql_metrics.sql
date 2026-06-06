@@ -876,3 +876,24 @@ SELECT
 FROM diagnostic_rows
 ORDER BY priority, index_size_bytes DESC, seq_scan DESC, schema_name, table_name, index_name
 LIMIT $limit$ OFFSET $offset$', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_extensions', 'PgSQL插件展示默认SQL', '/dbdiagnostic/ 插件展示 PgSQL 默认 SQL，展示当前数据库可用和已安装 extension。', 'SELECT
+    available.name AS extension_name,
+    (installed.oid IS NOT NULL) AS installed,
+    available.default_version,
+    available.installed_version,
+    installed.extversion AS installed_version_detail,
+    namespace.nspname AS schema_name,
+    installed.extrelocatable AS relocatable,
+    installed.extconfig::text AS config_oids,
+    installed.extcondition::text AS conditions,
+    available.comment AS description
+FROM pg_available_extensions available
+LEFT JOIN pg_extension installed ON installed.extname = available.name
+LEFT JOIN pg_namespace namespace ON namespace.oid = installed.extnamespace
+ORDER BY
+    (installed.oid IS NOT NULL) DESC,
+    available.name;', 'postgres', 1, 3000, NOW(6), NOW(6));

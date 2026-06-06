@@ -487,6 +487,34 @@ class TestView(TransactionTestCase):
             db_name="dynadot", schema_name="public"
         )
 
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_extensions(self, get_engine):
+        """PgSQL插件展示接口传递数据库过滤参数"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.extension_status.return_value = ResultSet(
+            column_list=[
+                "extension_name",
+                "installed",
+                "default_version",
+                "installed_version",
+            ],
+            rows=[("pg_stat_statements", True, "1.9", "1.9")],
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_extensions/",
+            data={"instance_name": self.ins.instance_name, "db_name": "dynadot"},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["rows"][0]["extension_name"], "pg_stat_statements")
+        engine.extension_status.assert_called_once_with(db_name="dynadot")
+
     def test_dbdiagnostic_replication_rejects_non_pgsql(self):
         """复制链路接口只支持 PgSQL 实例"""
         r = self.client.post(
@@ -531,6 +559,16 @@ class TestView(TransactionTestCase):
         """索引诊断接口只支持 PgSQL 实例"""
         r = self.client.post(
             "/db_diagnostic/pgsql_indexes/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
+    def test_dbdiagnostic_extensions_rejects_non_pgsql(self):
+        """插件展示接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_extensions/",
             data={"instance_name": self.ins.instance_name},
         )
 

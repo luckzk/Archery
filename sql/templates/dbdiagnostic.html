@@ -42,6 +42,9 @@
         <li id="indexes_tab">
             <a href="#indexes" role="tab" data-toggle="tab">索引诊断</a>
         </li>
+        <li id="extensions_tab">
+            <a href="#extensions" role="tab" data-toggle="tab">插件展示</a>
+        </li>
         <div class="form-inline pull-right">
             <div class="form-group ">
                 <select id="instance_name" class="form-control selectpicker" name="instance_name_list"
@@ -89,6 +92,7 @@
         {% include "dbdiagnostic/progress_tab.html" %}
         {% include "dbdiagnostic/wait_events_tab.html" %}
         {% include "dbdiagnostic/indexes_tab.html" %}
+        {% include "dbdiagnostic/extensions_tab.html" %}
     </div>
     <!-- 配置信息确认 -->
     <div class="modal fade" id="killComfirm">
@@ -125,6 +129,7 @@
     <script src="{% static 'dbdiagnostic/js/progress.js' %}"></script>
     <script src="{% static 'dbdiagnostic/js/wait_events.js' %}"></script>
     <script src="{% static 'dbdiagnostic/js/indexes.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/extensions.js' %}"></script>
     <script>
 
         var processListColumns  = [];
@@ -1347,6 +1352,8 @@
                         get_pgsql_wait_events_list();
                     } else if (active_li_id === 'indexes_tab') {
                         get_pgsql_indexes_list();
+                    } else if (active_li_id === 'extensions_tab') {
+                        get_pgsql_extensions_list();
                     } else if (active_li_id === 'trx_tab') {
                         get_trx_list();
                     }
@@ -1369,6 +1376,7 @@
             pgsqlTablespaceFilterInstance = "";
             pgsqlVacuumFilterInstance = "";
             pgsqlIndexesFilterInstance = "";
+            pgsqlExtensionsFilterInstance = "";
             processListTableInfos.forEach((processListTableInfo,i) =>{
                 if (processListTableInfo[0] === db_type) {
                     command_types = processListTableInfo[1];
@@ -1433,6 +1441,7 @@
             refresh_tablespace_toolbar();
             refresh_vacuum_toolbar();
             refresh_indexes_toolbar();
+            refresh_extensions_toolbar();
 
             $('#command').selectpicker('render');
             $('#command').selectpicker('refresh');
@@ -1459,6 +1468,8 @@
                 get_pgsql_wait_events_list();
             } else if (active_li_id === 'indexes_tab') {
                 get_pgsql_indexes_list();
+            } else if (active_li_id === 'extensions_tab') {
+                get_pgsql_extensions_list();
             } else if (active_li_id === 'trx_tab') {
                 get_trx_list();
             }
