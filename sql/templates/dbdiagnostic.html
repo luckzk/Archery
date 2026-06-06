@@ -2,8 +2,10 @@
 
 {% block content %}
     <!-- 自定义操作按钮-->
-    <div id="process-toolbar" class="btn-group right" style="display:none;">
+    <div id="process-toolbar" class="right" style="display:none;">
         <button id="kill_process" class="btn btn-default" type="button">终止会话</button>
+        <button id="cancel_pgsql_query" class="btn btn-default" type="button" style="display:none; margin-right: 8px;">取消查询</button>
+        <button id="terminate_pgsql_session" class="btn btn-default disabled" type="button" disabled style="display:none;">终止会话</button>
     </div>
     <!-- Nav tabs -->
     <ul id="nav-tabs" class="nav nav-tabs" role="tablist">
@@ -21,6 +23,24 @@
         </li>
         <li id="pubsub_tab">
             <a href="#pubsub" role="tab" data-toggle="tab">发布订阅</a>
+        </li>
+        <li id="replication_tab">
+            <a href="#replication" role="tab" data-toggle="tab">复制状态</a>
+        </li>
+        <li id="replication_slots_tab">
+            <a href="#replication-slots" role="tab" data-toggle="tab">复制Slot</a>
+        </li>
+        <li id="vacuum_tab">
+            <a href="#vacuum" role="tab" data-toggle="tab">Vacuum风险</a>
+        </li>
+        <li id="progress_tab">
+            <a href="#progress" role="tab" data-toggle="tab">Progress进度</a>
+        </li>
+        <li id="wait_events_tab">
+            <a href="#wait-events" role="tab" data-toggle="tab">等待事件</a>
+        </li>
+        <li id="indexes_tab">
+            <a href="#indexes" role="tab" data-toggle="tab">索引诊断</a>
         </li>
         <div class="form-inline pull-right">
             <div class="form-group ">
@@ -54,18 +74,8 @@
                    style="table-layout:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
             </table>
         </div>
-        <!-- Top表空间的表格-->
-        <div id="space" role="tabpanel" class="tab-pane fade table-responsive">
-            <table id="tablespace-list" data-toggle="table" class="table table-hover"
-                   style="table-layout:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            </table>
-        </div>
-        <!-- 事务信息的表格-->
-        <div id="trx" role="tabpanel" class="tab-pane fade table-responsive">
-            <table id="trx-list" data-toggle="table" class="table table-hover"
-                   style="table-layout:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-            </table>
-        </div>
+        {% include "dbdiagnostic/tablespace_tab.html" %}
+        {% include "dbdiagnostic/trx_tab.html" %}
         <!-- 锁信息的表格-->
         <div id="trxandlocks" role="tabpanel" class="tab-pane fade table-responsive">
             <table id="trxandlocks-list" data-toggle="table" class="table table-hover"
@@ -73,6 +83,12 @@
             </table>
         </div>
         {% include "dbdiagnostic/pubsub_tab.html" %}
+        {% include "dbdiagnostic/replication_tab.html" %}
+        {% include "dbdiagnostic/replication_slots_tab.html" %}
+        {% include "dbdiagnostic/vacuum_tab.html" %}
+        {% include "dbdiagnostic/progress_tab.html" %}
+        {% include "dbdiagnostic/wait_events_tab.html" %}
+        {% include "dbdiagnostic/indexes_tab.html" %}
     </div>
     <!-- 配置信息确认 -->
     <div class="modal fade" id="killComfirm">
@@ -104,15 +120,30 @@
     <script src="{% static 'bootstrap-table/js/tableExport.min.js' %}"></script>
     <script src="{% static 'dbdiagnostic/js/db_info.js' %}"></script>
     <script src="{% static 'dbdiagnostic/js/pubsub.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/replication.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/vacuum.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/progress.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/wait_events.js' %}"></script>
+    <script src="{% static 'dbdiagnostic/js/indexes.js' %}"></script>
     <script>
 
         var processListColumns  = [];
         var tablespaceListColumns = [];
         var lockListColumns = [];
+        var trxListColumns = [];
         var pubsubListColumns = [];
+        var replicationListColumns = [];
+        var replicationSlotsListColumns = [];
+        var progressListColumns = [];
+        var waitEventsListColumns = [];
         var processListDetailFormatCallback = NaN;
         var lockListDetailFormatCallback = NaN;
+        var trxListDetailFormatCallback = NaN;
         var pubsubListDetailFormatCallback = NaN;
+        var replicationListDetailFormatCallback = NaN;
+        var replicationSlotsListDetailFormatCallback = NaN;
+        var progressListDetailFormatCallback = NaN;
+        var pgsqlTablespaceFilterInstance = "";
 
         // get_process_list函数表格的格式化信息
         // 0.数据库类型； 1.类型过滤； 2.字段映射；  3.详细信息的处理函数
@@ -148,6 +179,7 @@
         function get_process_list() {
             $("#command-div").show();
             $("#process-toolbar").show();
+            refresh_process_toolbar();
             if ($("#instance_name").val()) {
                 //初始化table
                 $('#process-list').bootstrapTable('destroy').bootstrapTable({
@@ -332,11 +364,91 @@
             }]
         ]
         tablespaceListTableInfos.push(mongoTableInfo)
+        let pgsqlTableInfo = [
+            'pgsql',
+            [{
+                title: 'Schema',
+                field: 'schema_name',
+                sortable: true
+            }, {
+                title: '表名',
+                field: 'table_name',
+                sortable: true
+            }, {
+                title: 'Owner',
+                field: 'owner_name',
+                sortable: true
+            }, {
+                title: '总空间',
+                field: 'total_size',
+                sortable: true
+            }, {
+                title: '总空间(bytes)',
+                field: 'total_size_bytes',
+                sortable: true,
+                visible: false
+            }, {
+                title: '表数据空间',
+                field: 'table_size',
+                sortable: true
+            }, {
+                title: '表数据空间(bytes)',
+                field: 'table_size_bytes',
+                sortable: true,
+                visible: false
+            }, {
+                title: '索引空间',
+                field: 'index_size',
+                sortable: true
+            }, {
+                title: '索引空间(bytes)',
+                field: 'index_size_bytes',
+                sortable: true,
+                visible: false
+            }, {
+                title: 'TOAST空间',
+                field: 'toast_size',
+                sortable: true
+            }, {
+                title: '统计估算行数',
+                field: 'estimated_rows',
+                sortable: true
+            }, {
+                title: 'Dead Tuples',
+                field: 'dead_tuples',
+                sortable: true
+            }, {
+                title: '统计状态',
+                field: 'stats_status',
+                sortable: true
+            }, {
+                title: '最近Vacuum',
+                field: 'last_vacuum',
+                sortable: true,
+                visible: false
+            }, {
+                title: '最近Autovacuum',
+                field: 'last_autovacuum',
+                sortable: true
+            }, {
+                title: '最近Analyze',
+                field: 'last_analyze',
+                sortable: true,
+                visible: false
+            }, {
+                title: '最近Autoanalyze',
+                field: 'last_autoanalyze',
+                sortable: true,
+                visible: false
+            }]
+        ]
+        tablespaceListTableInfos.push(pgsqlTableInfo)
 
         // 问题诊断--表空间列表
         function get_space_list() {
             $("#command-div").hide();
             $("#process-toolbar").hide();
+            refresh_tablespace_toolbar();
             if ($("#instance_name").val()) {
                 //初始化table
                 $('#tablespace-list').bootstrapTable('destroy').bootstrapTable({
@@ -348,7 +460,7 @@
                     cache: false,                       //是否使用缓存，默认为true，所以一般情况下需要设置一下这个属性（*）
                     pagination: true,                   //是否显示分页（*）
                     sortable: true,                     //是否启用排序
-                    sortName: 'total_size',
+                    sortName: tablespace_sort_name(),
                     sortOrder: "desc",                   //排序方式
                     sidePagination: "server",           //分页方式：client客户端分页，server服务端分页（*）
                     pageNumber: 1,                      //初始化加载第一页，默认第一页,并记录
@@ -374,7 +486,9 @@
                         return {
                             offset: params.offset,
                             limit: params.limit,
-                            instance_name: $("#instance_name").val()
+                            instance_name: $("#instance_name").val(),
+                            db_name: $("#pgsql_tablespace_db").val(),
+                            schema_name: $("#pgsql_tablespace_schema").val()
                         }
                     },
                     columns: tablespaceListColumns,
@@ -395,6 +509,170 @@
                 });
             }
         }
+
+        // get_trx_list函数表格的格式化信息
+        // 0.数据库类型； 1.字段映射，2.详细信息的处理函数
+        let trxListTableInfos = [
+            [
+                'mysql',
+                [{
+                    title: 'trx_started',
+                    field: 'trx_started',
+                    sortable: true
+                }, {
+                    title: 'trx_idle_time',
+                    field: 'trx_idle_time',
+                    sortable: true
+                }, {
+                    title: 'trx_state',
+                    field: 'trx_state',
+                    sortable: true
+                }, {
+                    title: 'user',
+                    field: 'user',
+                }, {
+                    title: 'host',
+                    field: 'host'
+                }, {
+                    title: 'db',
+                    field: 'db'
+                }, {
+                    title: 'trx_mysql_thread_id',
+                    field: 'trx_mysql_thread_id',
+                }, {
+                    title: 'trx_operation_state',
+                    field: 'trx_operation_state'
+                }, {
+                    title: 'trx_tables_locked',
+                    field: 'trx_tables_locked',
+                }, {
+                    title: 'trx_rows_locked',
+                    field: 'trx_rows_locked',
+                }, {
+                    title: 'trx_rows_modified',
+                    field: 'trx_rows_modified',
+                }, {
+                    title: 'trx_is_read_only',
+                    field: 'trx_is_read_only'
+                }, {
+                    title: 'trx_isolation_level',
+                    field: 'trx_isolation_level'
+                }, {
+                    title: 'thread_time',
+                    field: 'thread_time',
+                    sortable: true
+                }, {
+                    title: 'info',
+                    field: 'info',
+                    formatter: function (value, row, index) {
+                        return truncateText(value, 20);
+                    }
+                }, {
+                    title: '完整INFO',
+                    field: 'info',
+                    visible: false
+                }],
+                function (index, row) {
+                    var html = [];
+                    if (row.info) {
+                        html.push('<span>' + formatSqlText(row.info) + '</span>');
+                    }
+                    return html.join('');
+                }
+            ],
+            [
+                'pgsql',
+                [{
+                    title: 'PID',
+                    field: 'pid',
+                    sortable: true
+                }, {
+                    title: '数据库',
+                    field: 'datname',
+                    sortable: true
+                }, {
+                    title: '用户',
+                    field: 'usename',
+                    sortable: true
+                }, {
+                    title: '应用名称',
+                    field: 'application_name',
+                    sortable: true
+                }, {
+                    title: '客户端地址',
+                    field: 'client_addr',
+                    sortable: true
+                }, {
+                    title: '状态',
+                    field: 'state',
+                    sortable: true
+                }, {
+                    title: '事务开始时间',
+                    field: 'xact_start',
+                    sortable: true
+                }, {
+                    title: '事务时长(秒)',
+                    field: 'transaction_duration_seconds',
+                    sortable: true
+                }, {
+                    title: '事务时长',
+                    field: 'transaction_duration',
+                    sortable: true
+                }, {
+                    title: '查询开始时间',
+                    field: 'query_start',
+                    sortable: true
+                }, {
+                    title: '查询时长(秒)',
+                    field: 'query_duration_seconds',
+                    sortable: true
+                }, {
+                    title: '等待事件类型',
+                    field: 'wait_event_type',
+                    sortable: true
+                }, {
+                    title: '等待事件',
+                    field: 'wait_event',
+                    sortable: true
+                }, {
+                    title: '后端XID',
+                    field: 'backend_xid',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '后端XMIN',
+                    field: 'backend_xmin',
+                    sortable: true
+                }, {
+                    title: '后端类型',
+                    field: 'backend_type',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: '状态变更时间',
+                    field: 'state_change',
+                    sortable: true,
+                    visible: false
+                }, {
+                    title: 'SQL',
+                    field: 'query',
+                    formatter: function (value, row, index) {
+                        return truncateText(value, 40);
+                    }
+                }, {
+                    title: '完整SQL',
+                    field: 'query',
+                    visible: false
+                }],
+                function (index, row) {
+                    var html = [];
+                    if (row.query) {
+                        html.push('<span>' + formatSqlText(row.query) + '</span>');
+                    }
+                    return html.join('');
+                }
+            ]
+        ]
 
         // 问题诊断--事务列表
         function get_trx_list() {
@@ -428,15 +706,7 @@
                     cardView: false,                    //是否显示详细视图
                     detailView: true,                  //是否显示父子表
                     //格式化详情
-                    detailFormatter: function (index, row) {
-                        var html = [];
-                        $.each(row, function (key, value) {
-                            if (key === 'info') {
-                                html.push('<span>' + formatSqlText(value) + '</span>');
-                            }
-                        });
-                        return html.join('');
-                    },
+                    detailFormatter: trxListDetailFormatCallback,
                     locale: 'zh-CN',                    //本地化
                     toolbar: "#toolbar",               //指明自定义的toolbar
                     queryParamsType: 'limit',
@@ -446,63 +716,7 @@
                             instance_name: $("#instance_name").val()
                         }
                     },
-                    columns: [{
-                        title: 'trx_started',
-                        field: 'trx_started',
-                        sortable: true
-                    }, {
-                        title: 'trx_idle_time',
-                        field: 'trx_idle_time',
-                        sortable: true
-                    }, {
-                        title: 'trx_state',
-                        field: 'trx_state',
-                        sortable: true
-                    }, {
-                        title: 'user',
-                        field: 'user',
-                    }, {
-                        title: 'host',
-                        field: 'host'
-                    }, {
-                        title: 'db',
-                        field: 'db'
-                    }, {
-                        title: 'trx_mysql_thread_id',
-                        field: 'trx_mysql_thread_id',
-                    }, {
-                        title: 'trx_operation_state',
-                        field: 'trx_operation_state'
-                    }, {
-                        title: 'trx_tables_locked',
-                        field: 'trx_tables_locked',
-                    }, {
-                        title: 'trx_rows_locked',
-                        field: 'trx_rows_locked',
-                    }, {
-                        title: 'trx_rows_modified',
-                        field: 'trx_rows_modified',
-                    }, {
-                        title: 'trx_is_read_only',
-                        field: 'trx_is_read_only'
-                    }, {
-                        title: 'trx_isolation_level',
-                        field: 'trx_isolation_level'
-                    }, {
-                        title: 'thread_time',
-                        field: 'thread_time',
-                        sortable: true
-                    }, {
-                        title: 'info',
-                        field: 'info',
-                        formatter: function (value, row, index) {
-                            return truncateText(value, 20);
-                        }
-                    }, {
-                        title: '完整INFO',
-                        field: 'info',
-                        visible: false // 默认不显示
-                    }],
+                    columns: trxListColumns,
                     onLoadSuccess: function (data) {
                         if (data.status !== 0) {
                             alert("数据加载失败！" + data.msg);
@@ -823,25 +1037,121 @@
         }
 
         //点击终止会话按钮弹出确认框,并且构建终止会话请求
+        function current_instance_db_type() {
+            var db_type = NaN;
+            if (!Array.isArray(allInstances)) {
+                return db_type;
+            }
+            allInstances.forEach((instanceInfo,i) => {
+                if (instanceInfo["instance_name"] === $("#instance_name").val()) {
+                    db_type = instanceInfo["db_type"];
+                }
+            })
+            return db_type;
+        }
+
+        function selected_process_ids() {
+            var AllSelections = $("#process-list").bootstrapTable('getSelections');
+            var AllSelectionIds = [];
+            for (var i = 0; i < AllSelections.length; i++) {
+                if (AllSelections[i]['id']){
+                    AllSelectionIds.push(AllSelections[i]['id'])    // mysql
+                } else if (AllSelections[i]['opid']) {
+                    AllSelectionIds.push(AllSelections[i]['opid'])  // mongo
+                } else if (AllSelections[i]['SID']) {
+                    AllSelectionIds.push([AllSelections[i]['SID'],AllSelections[i]['SERIAL#']])  // oracle
+                } else if (AllSelections[i]['kill_id']) {
+                    AllSelectionIds.push(AllSelections[i]['kill_id'])  // tdengine
+                }  else if (AllSelections[i]['query_id']) {
+                    AllSelectionIds.push(AllSelections[i]['query_id']) // clickhouse
+                } else if (AllSelections[i]['pid']) {
+                    AllSelectionIds.push(AllSelections[i]['pid']) // pgsql
+                }
+            }
+            return AllSelectionIds;
+        }
+
+        function refresh_process_toolbar() {
+            if (current_instance_db_type() === 'pgsql') {
+                $("#kill_process").hide();
+                $("#cancel_pgsql_query").show();
+                $("#terminate_pgsql_session").show();
+            } else {
+                $("#kill_process").show();
+                $("#cancel_pgsql_query").hide();
+                $("#terminate_pgsql_session").hide();
+            }
+        }
+
+        function tablespace_sort_name() {
+            if (current_instance_db_type() === 'pgsql') {
+                return 'total_size_bytes';
+            }
+            return 'total_size';
+        }
+
+        function refresh_tablespace_toolbar() {
+            if (current_instance_db_type() === 'pgsql') {
+                $("#pgsql-tablespace-toolbar").show();
+                if (sessionStorage.getItem('diagnostic_active_li_id') === 'space_tab') {
+                    load_pgsql_tablespace_filters(false);
+                }
+            } else {
+                $("#pgsql-tablespace-toolbar").hide();
+                $("#pgsql_tablespace_db").empty().selectpicker('render').selectpicker('refresh');
+                $("#pgsql_tablespace_schema").empty().selectpicker('render').selectpicker('refresh');
+                pgsqlTablespaceFilterInstance = "";
+            }
+        }
+
+        function fill_pgsql_tablespace_select(selector, values, selectedValue) {
+            var select = $(selector);
+            select.empty();
+            select.append("<option value=\"\">全部</option>");
+            (values || []).forEach(function (value) {
+                select.append("<option value=\"" + value + "\">" + value + "</option>");
+            });
+            select.selectpicker('render');
+            select.selectpicker('refresh');
+            select.selectpicker('val', selectedValue || "");
+        }
+
+        function load_pgsql_tablespace_filters(force) {
+            var instanceName = $("#instance_name").val();
+            if (!instanceName || current_instance_db_type() !== 'pgsql') {
+                return;
+            }
+            if (!force && pgsqlTablespaceFilterInstance === instanceName) {
+                return;
+            }
+            $.ajax({
+                type: "get",
+                url: "/db_diagnostic/pgsql_tablespace_filters/",
+                dataType: "json",
+                data: {
+                    instance_name: instanceName,
+                    db_name: $("#pgsql_tablespace_db").val()
+                },
+                success: function (data) {
+                    if (data.status === 0) {
+                        var result = data.data || {};
+                        var selectedDb = $("#pgsql_tablespace_db").val() || result.selected_db || "";
+                        fill_pgsql_tablespace_select("#pgsql_tablespace_db", result.databases, selectedDb);
+                        fill_pgsql_tablespace_select("#pgsql_tablespace_schema", result.schemas, $("#pgsql_tablespace_schema").val());
+                        pgsqlTablespaceFilterInstance = instanceName;
+                    } else {
+                        alert(data.msg);
+                    }
+                }
+            })
+        }
+
         $(function () {
             $("#kill_process").click(function () {
                 var AllSelections = $("#process-list").bootstrapTable('getSelections');
                 if (AllSelections.length > 0) {
                     //获取选择的线程id
-                    var AllSelectionIds = [];
-                    for (var i = 0; i < AllSelections.length; i++) {
-                        if (AllSelections[i]['id']){
-                            AllSelectionIds.push(AllSelections[i]['id'])    // mysql
-                        } else if (AllSelections[i]['opid']) {
-                            AllSelectionIds.push(AllSelections[i]['opid'])  // mongo
-                        } else if (AllSelections[i]['SID']) {
-                            AllSelectionIds.push([AllSelections[i]['SID'],AllSelections[i]['SERIAL#']])  // oracle
-                        } else if (AllSelections[i]['kill_id']) {
-                            AllSelectionIds.push(AllSelections[i]['kill_id'])  // tdengine
-                        }  else if (AllSelections[i]['query_id']) {
-                            AllSelectionIds.push(AllSelections[i]['query_id']) // clickhouse
-                        }
-                    }
+                    var AllSelectionIds = selected_process_ids();
                     var instance_name = $("#instance_name").val();
 
                     //发送请求构造会话数据
@@ -874,6 +1184,54 @@
                     alert("请先选择要终止的会话")
                 }
             });
+
+            $("#cancel_pgsql_query").click(function () {
+                var AllSelections = $("#process-list").bootstrapTable('getSelections');
+                if (AllSelections.length > 0) {
+                    var AllSelectionIds = selected_process_ids();
+                    $.ajax({
+                        type: "post",
+                        url: "/db_diagnostic/cancel_session/",
+                        dataType: "json",
+                        data: {
+                            instance_name: $("#instance_name").val(),
+                            ThreadIDs: JSON.stringify(AllSelectionIds)
+                        },
+                        traditional: true,
+                        complete: function () {
+                            get_process_list();
+                            $("#command-div").show();
+                            $("#process-toolbar").show();
+                            refresh_process_toolbar();
+                        },
+                        success: function (data) {
+                            if (data.status !== 0) {
+                                alert(data.msg);
+                            }
+                        }
+                    })
+                } else {
+                    alert("请先选择要取消的查询")
+                }
+            });
+
+            $("#pgsql_tablespace_search").click(function () {
+                get_space_list();
+            });
+
+            $("#pgsql_tablespace_reset").click(function () {
+                $("#pgsql_tablespace_db").selectpicker('val', "");
+                $("#pgsql_tablespace_schema").selectpicker('val', "");
+                pgsqlTablespaceFilterInstance = "";
+                load_pgsql_tablespace_filters(true);
+                get_space_list();
+            });
+
+            $("#pgsql_tablespace_db").change(function () {
+                $("#pgsql_tablespace_schema").selectpicker('val', "");
+                pgsqlTablespaceFilterInstance = "";
+                load_pgsql_tablespace_filters(true);
+            });
         });
 
         //终止会话
@@ -881,20 +1239,7 @@
             var AllSelections = $("#process-list").bootstrapTable('getSelections');
             if (AllSelections.length > 0) {
                 //获取选择的线程id
-                var AllSelectionIds = [];
-                for (var i = 0; i < AllSelections.length; i++) {
-                    if (AllSelections[i]['id']){
-                        AllSelectionIds.push(AllSelections[i]['id'])    // mysql
-                    } else if (AllSelections[i]['opid']) {
-                        AllSelectionIds.push(AllSelections[i]['opid'])  // mongo
-                    } else if (AllSelections[i]['SID']) {
-                        AllSelectionIds.push([AllSelections[i]['SID'],AllSelections[i]['SERIAL#']])  // oracle
-                    } else if (AllSelections[i]['kill_id']) {
-                        AllSelectionIds.push(AllSelections[i]['kill_id'])    // tdengine
-                    } else if (AllSelections[i]['query_id']) {
-                        AllSelectionIds.push(AllSelections[i]['query_id']) // clickhouse
-                    }
-                }
+                var AllSelectionIds = selected_process_ids();
                 var instance_name = $("#instance_name").val();
                 var request_params = $("#request_params").val();
                 if (request_params) {
@@ -913,6 +1258,7 @@
                             get_process_list();
                             $("#command-div").show();
                             $("#process-toolbar").show();
+                            refresh_process_toolbar();
                         },
                         success: function (data) {
                             if (data.status === 0) {
@@ -989,6 +1335,18 @@
                         get_trxandlocks_list();
                     } else if (active_li_id === 'pubsub_tab') {
                         get_pubsub_list();
+                    } else if (active_li_id === 'replication_tab') {
+                        get_pgsql_replication_list();
+                    } else if (active_li_id === 'replication_slots_tab') {
+                        get_pgsql_replication_slots_list();
+                    } else if (active_li_id === 'vacuum_tab') {
+                        get_pgsql_vacuum_list();
+                    } else if (active_li_id === 'progress_tab') {
+                        get_pgsql_progress_list();
+                    } else if (active_li_id === 'wait_events_tab') {
+                        get_pgsql_wait_events_list();
+                    } else if (active_li_id === 'indexes_tab') {
+                        get_pgsql_indexes_list();
                     } else if (active_li_id === 'trx_tab') {
                         get_trx_list();
                     }
@@ -1008,6 +1366,9 @@
                     db_type = instanceInfo["db_type"];
                 }
             })
+            pgsqlTablespaceFilterInstance = "";
+            pgsqlVacuumFilterInstance = "";
+            pgsqlIndexesFilterInstance = "";
             processListTableInfos.forEach((processListTableInfo,i) =>{
                 if (processListTableInfo[0] === db_type) {
                     command_types = processListTableInfo[1];
@@ -1026,10 +1387,39 @@
                     lockListDetailFormatCallback = lockListTableInfo[2];
                 }
             })
+            trxListTableInfos.forEach((trxListTableInfo,i) =>{
+                if (trxListTableInfo[0] === db_type) {
+                    trxListColumns = trxListTableInfo[1];
+                    trxListDetailFormatCallback = trxListTableInfo[2];
+                }
+            })
             pubsubListTableInfos.forEach((pubsubListTableInfo,i) =>{
                 if (pubsubListTableInfo[0] === db_type) {
                     pubsubListColumns = pubsubListTableInfo[1];
                     pubsubListDetailFormatCallback = pubsubListTableInfo[2];
+                }
+            })
+            replicationListTableInfos.forEach((replicationListTableInfo,i) =>{
+                if (replicationListTableInfo[0] === db_type) {
+                    replicationListColumns = replicationListTableInfo[1];
+                    replicationListDetailFormatCallback = replicationListTableInfo[2];
+                }
+            })
+            replicationSlotsListTableInfos.forEach((replicationSlotsListTableInfo,i) =>{
+                if (replicationSlotsListTableInfo[0] === db_type) {
+                    replicationSlotsListColumns = replicationSlotsListTableInfo[1];
+                    replicationSlotsListDetailFormatCallback = replicationSlotsListTableInfo[2];
+                }
+            })
+            progressListTableInfos.forEach((progressListTableInfo,i) =>{
+                if (progressListTableInfo[0] === db_type) {
+                    progressListColumns = progressListTableInfo[1];
+                    progressListDetailFormatCallback = progressListTableInfo[2];
+                }
+            })
+            waitEventsListTableInfos.forEach((waitEventsListTableInfo,i) =>{
+                if (waitEventsListTableInfo[0] === db_type) {
+                    waitEventsListColumns = waitEventsListTableInfo[1];
                 }
             })
             
@@ -1038,6 +1428,11 @@
                 let instance = "<option value=\"" + command_types[i]+ "\">" + command_types[i] + "</option>";
                 $("#command").append(instance);
             }
+
+            refresh_process_toolbar();
+            refresh_tablespace_toolbar();
+            refresh_vacuum_toolbar();
+            refresh_indexes_toolbar();
 
             $('#command').selectpicker('render');
             $('#command').selectpicker('refresh');
@@ -1052,6 +1447,18 @@
                 get_trxandlocks_list();
             } else if (active_li_id === 'pubsub_tab') {
                 get_pubsub_list();
+            } else if (active_li_id === 'replication_tab') {
+                get_pgsql_replication_list();
+            } else if (active_li_id === 'replication_slots_tab') {
+                get_pgsql_replication_slots_list();
+            } else if (active_li_id === 'vacuum_tab') {
+                get_pgsql_vacuum_list();
+            } else if (active_li_id === 'progress_tab') {
+                get_pgsql_progress_list();
+            } else if (active_li_id === 'wait_events_tab') {
+                get_pgsql_wait_events_list();
+            } else if (active_li_id === 'indexes_tab') {
+                get_pgsql_indexes_list();
             } else if (active_li_id === 'trx_tab') {
                 get_trx_list();
             }

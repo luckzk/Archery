@@ -179,7 +179,7 @@ class DBDiagnosticSQLTemplateAdmin(admin.ModelAdmin):
                     "description",
                     "enabled",
                 ),
-                "description": "当前用于 /dbdiagnostic/ 会话管理页面，支持 PgSQL 进程状态、PgSQL 锁信息和 PgSQL 发布订阅。",
+                "description": "当前用于 /dbdiagnostic/ 会话管理页面，支持 PgSQL 进程状态、PgSQL事务信息、PgSQL Top表空间、PgSQL锁信息、PgSQL发布订阅、PgSQL复制状态、PgSQL复制Slot、PgSQL Vacuum风险、PgSQL Progress进度、PgSQL等待事件聚合和 PgSQL索引诊断。",
             },
         ),
         (
@@ -193,7 +193,7 @@ class DBDiagnosticSQLTemplateAdmin(admin.ModelAdmin):
             "输出字段约定",
             {
                 "fields": (),
-                "description": "PgSQL进程状态字段需匹配 pgsqlDiagnosticInfo.fieldsProcesslist；PgSQL锁信息字段需匹配 dbdiagnostic.html 中 pgsql 锁信息列，如 waiting_pid、blocking_pid、blocking_chain、waiting_query、blocking_query；PgSQL发布订阅字段需返回 object_type、object_name、enabled、owner_name、database_name。",
+                "description": "PgSQL进程状态字段需匹配 pgsqlDiagnosticInfo.fieldsProcesslist；PgSQL事务信息字段需返回 pid、datname、usename、state、xact_start、query；PgSQL Top表空间字段需返回 schema_name、table_name、total_size_bytes、total_size；PgSQL锁信息字段需匹配 dbdiagnostic.html 中 pgsql 锁信息列，如 waiting_pid、blocking_pid、blocking_chain、waiting_query、blocking_query；PgSQL发布订阅字段需返回 object_type、object_name、enabled、owner_name、database_name；PgSQL复制状态字段需返回 pid、usename、application_name、client_addr、state、sync_state；PgSQL复制Slot字段需返回 slot_name、slot_type、active、restart_lsn；PgSQL Vacuum风险字段需返回 schema_name、table_name、n_live_tup、n_dead_tup、dead_tuple_ratio、relfrozenxid_age；PgSQL Progress进度字段需返回 progress_type、pid、database_name、relation_name、phase、progress_percent、blocks_done、blocks_total、query；PgSQL等待事件聚合字段需返回 state、wait_event_type、wait_event、session_count、max_wait_seconds、max_query_seconds；PgSQL索引诊断字段需返回 diagnostic_type、schema_name、table_name、index_name、index_size、idx_scan、seq_scan、is_valid、is_unique、reason。",
             },
         ),
     )

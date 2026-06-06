@@ -850,6 +850,649 @@ class TestPgSQL(TestCase):
         self.assertEqual(call_kwargs["max_execution_time"], 2345)
         self.assertIn("pub1", call_kwargs["sql"])
 
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_replication_status_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_replication",
+            template_name="replication custom",
+            sql="SELECT 1 AS pid, 'rep' AS usename, 'standby' AS application_name, '127.0.0.1' AS client_addr, 'streaming' AS state, 'async' AS sync_state",
+            db_name="postgres",
+            timeout_ms=2345,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "pid",
+                "usename",
+                "application_name",
+                "client_addr",
+                "state",
+                "sync_state",
+            ],
+            rows=[(1, "rep", "standby", "127.0.0.1", "streaming", "async")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.replication_status()
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 2345)
+        self.assertIn("standby", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_replication_slots_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_replication_slots",
+            template_name="slot custom",
+            sql="SELECT 'slot1' AS slot_name, 'physical' AS slot_type, true AS active, '0/1' AS restart_lsn",
+            db_name="postgres",
+            timeout_ms=3456,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=["slot_name", "slot_type", "active", "restart_lsn"],
+            rows=[("slot1", "physical", True, "0/1")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.replication_slots()
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 3456)
+        self.assertIn("slot1", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_progress_status_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_progress",
+            template_name="progress custom",
+            sql="SELECT 'vacuum' AS progress_type, 1 AS pid, 'postgres' AS database_name, 'public.t1' AS relation_name, 'scanning heap' AS phase, 50 AS progress_percent, 10 AS blocks_done, 20 AS blocks_total, 'vacuum public.t1' AS query",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "progress_type",
+                "pid",
+                "database_name",
+                "relation_name",
+                "phase",
+                "progress_percent",
+                "blocks_done",
+                "blocks_total",
+                "query",
+            ],
+            rows=[("vacuum", 1, "postgres", "public.t1", "scanning heap", 50, 10, 20, "vacuum public.t1")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.progress_status()
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("vacuum public.t1", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_wait_event_summary_uses_pgsql_diagnostic_sql(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_wait_events",
+            template_name="wait custom",
+            sql="SELECT 'active' AS state, 'Lock' AS wait_event_type, 'relation' AS wait_event, 2 AS session_count, 30 AS max_wait_seconds, 60 AS max_query_seconds",
+            db_name="postgres",
+            timeout_ms=5678,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "state",
+                "wait_event_type",
+                "wait_event",
+                "session_count",
+                "max_wait_seconds",
+                "max_query_seconds",
+            ],
+            rows=[("active", "Lock", "relation", 2, 30, 60)],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.wait_event_summary()
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 5678)
+        self.assertIn("relation", call_kwargs["sql"])
+
+    def test_get_cancel_command_uses_pg_cancel_backend(self):
+        new_engine = PgSQLEngine(instance=self.ins)
+
+        self.assertEqual(
+            new_engine.get_cancel_command([1, "2"]),
+            "SELECT pg_cancel_backend(1);SELECT pg_cancel_backend(2);",
+        )
+        self.assertEqual(new_engine.get_cancel_command([]), "")
+        self.assertIsNone(new_engine.get_cancel_command(["bad"]))
+
+    def test_get_kill_command_uses_pg_terminate_backend(self):
+        new_engine = PgSQLEngine(instance=self.ins)
+
+        self.assertEqual(
+            new_engine.get_kill_command([1, "2"]),
+            "SELECT pg_terminate_backend(1);SELECT pg_terminate_backend(2);",
+        )
+        self.assertEqual(new_engine.get_kill_command([]), "")
+        self.assertIsNone(new_engine.get_kill_command(["bad"]))
+
+    @patch("sql.engines.pgsql.PgSQLEngine.get_connection")
+    def test_cancel_backend_cancels_pgsql_backends(self, mock_get_connection):
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.side_effect = [[(True,)], [(False,)]]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_connection.return_value = mock_conn
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.cancel_backend([1, "2"])
+
+        self.assertIsNone(result.error)
+        self.assertEqual(result.column_list, ["pg_cancel_backend"])
+        self.assertEqual(result.rows, [(True,), (False,)])
+        self.assertEqual(result.affected_rows, 2)
+        self.assertEqual(
+            result.full_sql,
+            "SELECT pg_cancel_backend(1);SELECT pg_cancel_backend(2);",
+        )
+        mock_cursor.execute.assert_any_call("SELECT pg_cancel_backend(%s);", (1,))
+        mock_cursor.execute.assert_any_call("SELECT pg_cancel_backend(%s);", (2,))
+        mock_conn.commit.assert_called_once()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.get_connection")
+    def test_kill_terminates_pgsql_backends(self, mock_get_connection):
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [(True,)]
+        mock_conn = MagicMock()
+        mock_conn.cursor.return_value = mock_cursor
+        mock_get_connection.return_value = mock_conn
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.kill([3])
+
+        self.assertIsNone(result.error)
+        self.assertEqual(result.column_list, ["pg_terminate_backend"])
+        self.assertEqual(result.rows, [(True,)])
+        self.assertEqual(result.full_sql, "SELECT pg_terminate_backend(3);")
+        mock_cursor.execute.assert_called_once_with(
+            "SELECT pg_terminate_backend(%s);", (3,)
+        )
+        mock_conn.commit.assert_called_once()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.get_connection")
+    def test_kill_rejects_invalid_pgsql_pid(self, mock_get_connection):
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.kill(["bad"])
+
+        self.assertEqual(result.full_sql, "")
+        self.assertEqual(result.rows, [])
+        mock_get_connection.assert_not_called()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_get_long_transaction_queries_pg_stat_activity(self, mock_query):
+        mock_query.return_value = ResultSet(
+            column_list=["pid", "datname", "usename", "state", "xact_start", "query"],
+            rows=[],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.get_long_transaction()
+
+        self.assertIsInstance(result, ResultSet)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 3000)
+        self.assertIn("pg_stat_activity", call_kwargs["sql"])
+        self.assertIn("transaction_duration_seconds", call_kwargs["sql"])
+        self.assertIn("make_interval(secs => 3)", call_kwargs["sql"])
+        self.assertNotIn("$thread_time$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_get_long_transaction_uses_custom_template(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_trx",
+            template_name="trx custom",
+            sql="SELECT 1 AS pid, 'postgres' AS datname, 'u' AS usename, 'idle in transaction' AS state, now() AS xact_start, 'select 1' AS query WHERE $thread_time$ = 9",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=["pid", "datname", "usename", "state", "xact_start", "query"],
+            rows=[(1, "postgres", "u", "idle in transaction", "now", "select 1")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.get_long_transaction(thread_time=9)
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("WHERE 9 = 9", call_kwargs["sql"])
+        self.assertNotIn("$thread_time$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_uses_pgsql_diagnostic_sql(self, mock_query):
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "total_size_bytes",
+                "total_size",
+            ],
+            rows=[("public", "t1", 1024, "1024 bytes")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.tablespace(offset=5, row_count=10, schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 3000)
+        self.assertIn("pg_total_relation_size", call_kwargs["sql"])
+        self.assertIn("LIMIT 10 OFFSET 5", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$limit$", call_kwargs["sql"])
+        self.assertNotIn("$offset$", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_uses_custom_template(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_tablespace",
+            template_name="tablespace custom",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 1 AS total_size_bytes, '1 byte' AS total_size WHERE $schema_name$ = 'public' LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "total_size_bytes",
+                "total_size",
+            ],
+            rows=[("public", "t1", 1, "1 byte")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.tablespace(offset=2, row_count=3, schema_name="public")
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("WHERE 'public' = 'public'", call_kwargs["sql"])
+        self.assertIn("LIMIT 3 OFFSET 2", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_tablespace",
+            template_name="tablespace custom db",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 1 AS total_size_bytes, '1 byte' AS total_size LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "total_size_bytes",
+                "total_size",
+            ],
+            rows=[("public", "t1", 1, "1 byte")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.tablespace(offset=0, row_count=3, db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_count_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_tablespace",
+            template_name="tablespace count custom db",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 1 AS total_size_bytes, '1 byte' AS total_size LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.tablespace_count(db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_rejects_invalid_schema_name(self, mock_query):
+        new_engine = PgSQLEngine(instance=self.ins)
+
+        result = new_engine.tablespace(schema_name="public';drop table x;--")
+
+        self.assertEqual(
+            result.error, "Schema名称只允许字母、数字、下划线、点、美元符号和短横线"
+        )
+        mock_query.assert_not_called()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_tablespace_count_wraps_tablespace_sql(self, mock_query):
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.tablespace_count(schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertIn("SELECT count(*) AS total FROM", call_kwargs["sql"])
+        self.assertIn("dbdiagnostic_tablespace_count", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_uses_pgsql_diagnostic_sql(self, mock_query):
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "n_live_tup",
+                "n_dead_tup",
+                "dead_tuple_ratio",
+                "relfrozenxid_age",
+            ],
+            rows=[("public", "t1", 10, 2, 16.67, 1000)],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.vacuum_risk(offset=5, row_count=10, schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 3000)
+        self.assertIn("pg_stat_user_tables", call_kwargs["sql"])
+        self.assertIn("LIMIT 10 OFFSET 5", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$limit$", call_kwargs["sql"])
+        self.assertNotIn("$offset$", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_uses_custom_template(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_vacuum",
+            template_name="vacuum custom",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 10 AS n_live_tup, 2 AS n_dead_tup, 16.67 AS dead_tuple_ratio, 1000 AS relfrozenxid_age WHERE $schema_name$ = 'public' LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "n_live_tup",
+                "n_dead_tup",
+                "dead_tuple_ratio",
+                "relfrozenxid_age",
+            ],
+            rows=[("public", "t1", 10, 2, 16.67, 1000)],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.vacuum_risk(offset=2, row_count=3, schema_name="public")
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("WHERE 'public' = 'public'", call_kwargs["sql"])
+        self.assertIn("LIMIT 3 OFFSET 2", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_vacuum",
+            template_name="vacuum custom db",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 10 AS n_live_tup, 2 AS n_dead_tup, 16.67 AS dead_tuple_ratio, 1000 AS relfrozenxid_age LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "n_live_tup",
+                "n_dead_tup",
+                "dead_tuple_ratio",
+                "relfrozenxid_age",
+            ],
+            rows=[("public", "t1", 10, 2, 16.67, 1000)],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.vacuum_risk(offset=0, row_count=3, db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_count_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_vacuum",
+            template_name="vacuum count custom db",
+            sql="SELECT 'public' AS schema_name, 't1' AS table_name, 10 AS n_live_tup, 2 AS n_dead_tup, 16.67 AS dead_tuple_ratio, 1000 AS relfrozenxid_age LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.vacuum_risk_count(db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_rejects_invalid_schema_name(self, mock_query):
+        new_engine = PgSQLEngine(instance=self.ins)
+
+        result = new_engine.vacuum_risk(schema_name="public';drop table x;--")
+
+        self.assertEqual(
+            result.error, "Schema名称只允许字母、数字、下划线、点、美元符号和短横线"
+        )
+        mock_query.assert_not_called()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_vacuum_risk_count_wraps_vacuum_sql(self, mock_query):
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.vacuum_risk_count(schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertIn("SELECT count(*) AS total FROM", call_kwargs["sql"])
+        self.assertIn("dbdiagnostic_vacuum_count", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_uses_pgsql_diagnostic_sql(self, mock_query):
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "diagnostic_type",
+                "schema_name",
+                "table_name",
+                "index_name",
+                "index_size",
+                "idx_scan",
+                "seq_scan",
+                "is_valid",
+                "is_unique",
+                "reason",
+            ],
+            rows=[("unused_index", "public", "t1", "idx_t1", "1 MB", 0, 10, True, False, "unused")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.index_diagnostic(offset=5, row_count=10, schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertEqual(call_kwargs["max_execution_time"], 3000)
+        self.assertIn("pg_stat_user_indexes", call_kwargs["sql"])
+        self.assertIn("LIMIT 10 OFFSET 5", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$limit$", call_kwargs["sql"])
+        self.assertNotIn("$offset$", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_uses_custom_template(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_indexes",
+            template_name="indexes custom",
+            sql="SELECT 'unused_index' AS diagnostic_type, 'public' AS schema_name, 't1' AS table_name, 'idx_t1' AS index_name, '1 MB' AS index_size, 0 AS idx_scan, 10 AS seq_scan, true AS is_valid, false AS is_unique, 'unused' AS reason WHERE $schema_name$ = 'public' LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "diagnostic_type",
+                "schema_name",
+                "table_name",
+                "index_name",
+                "index_size",
+                "idx_scan",
+                "seq_scan",
+                "is_valid",
+                "is_unique",
+                "reason",
+            ],
+            rows=[("unused_index", "public", "t1", "idx_t1", "1 MB", 0, 10, True, False, "unused")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.index_diagnostic(offset=2, row_count=3, schema_name="public")
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["max_execution_time"], 4567)
+        self.assertIn("WHERE 'public' = 'public'", call_kwargs["sql"])
+        self.assertIn("LIMIT 3 OFFSET 2", call_kwargs["sql"])
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_indexes",
+            template_name="indexes custom db",
+            sql="SELECT 'unused_index' AS diagnostic_type, 'public' AS schema_name, 't1' AS table_name, 'idx_t1' AS index_name, '1 MB' AS index_size, 0 AS idx_scan, 10 AS seq_scan, true AS is_valid, false AS is_unique, 'unused' AS reason LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=[
+                "diagnostic_type",
+                "schema_name",
+                "table_name",
+                "index_name",
+                "index_size",
+                "idx_scan",
+                "seq_scan",
+                "is_valid",
+                "is_unique",
+                "reason",
+            ],
+            rows=[("unused_index", "public", "t1", "idx_t1", "1 MB", 0, 10, True, False, "unused")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.index_diagnostic(offset=0, row_count=3, db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_count_page_db_name_overrides_template_db_name(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_indexes",
+            template_name="indexes count custom db",
+            sql="SELECT 'unused_index' AS diagnostic_type, 'public' AS schema_name, 't1' AS table_name, 'idx_t1' AS index_name, '1 MB' AS index_size, 0 AS idx_scan, 10 AS seq_scan, true AS is_valid, false AS is_unique, 'unused' AS reason LIMIT $limit$ OFFSET $offset$",
+            db_name="postgres",
+            timeout_ms=4567,
+        )
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.index_diagnostic_count(db_name="dynadot")
+
+        self.assertIsNone(result.error)
+        self.assertEqual(mock_query.call_args.kwargs["db_name"], "dynadot")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_rejects_invalid_schema_name(self, mock_query):
+        new_engine = PgSQLEngine(instance=self.ins)
+
+        result = new_engine.index_diagnostic(schema_name="public';drop table x;--")
+
+        self.assertEqual(
+            result.error, "Schema名称只允许字母、数字、下划线、点、美元符号和短横线"
+        )
+        mock_query.assert_not_called()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_index_diagnostic_count_wraps_index_sql(self, mock_query):
+        mock_query.return_value = ResultSet(column_list=["total"], rows=[(1,)])
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.index_diagnostic_count(schema_name="public")
+
+        self.assertIsNone(result.error)
+        mock_query.assert_called_once()
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["db_name"], "postgres")
+        self.assertIn("SELECT count(*) AS total FROM", call_kwargs["sql"])
+        self.assertIn("dbdiagnostic_indexes_count", call_kwargs["sql"])
+        self.assertIn("'public' = '' OR namespace.nspname = 'public'", call_kwargs["sql"])
+        self.assertNotIn("$schema_name$", call_kwargs["sql"])
+
     @patch("psycopg2.connect")
     def test_processlist_not_idle(self, mock_connect):
         # 模拟数据库连接和游标

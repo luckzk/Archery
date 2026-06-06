@@ -381,8 +381,16 @@ class DBDiagnosticSQLTemplate(models.Model):
 
     DIAGNOSTIC_TYPE_CHOICES = (
         ("pgsql_processlist", "PgSQL进程状态"),
+        ("pgsql_trx", "PgSQL事务信息"),
+        ("pgsql_tablespace", "PgSQL Top表空间"),
         ("pgsql_trxandlocks", "PgSQL锁信息"),
         ("pgsql_pubsub", "PgSQL发布订阅"),
+        ("pgsql_replication", "PgSQL复制状态"),
+        ("pgsql_replication_slots", "PgSQL复制Slot"),
+        ("pgsql_vacuum", "PgSQL Vacuum风险"),
+        ("pgsql_progress", "PgSQL Progress进度"),
+        ("pgsql_wait_events", "PgSQL等待事件聚合"),
+        ("pgsql_indexes", "PgSQL索引诊断"),
     )
 
     db_type = models.CharField("数据库类型", max_length=20, choices=DB_TYPE_CHOICES)

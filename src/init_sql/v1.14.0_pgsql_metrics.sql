@@ -140,6 +140,100 @@ VALUES
                                     when psa.state=''idle'' then 99 else 100 end)
                                     ,elapsed_time_seconds desc
                                 ,(case when psa.leader_pid is not null then 1 else 0 end);', 'postgres', 1, 3000, NOW(6), NOW(6)),
+('pgsql', 'pgsql_trx', 'PgSQL事务信息默认SQL', '/dbdiagnostic/ 事务信息 PgSQL 默认 SQL，展示长事务和 idle in transaction 会话。', 'SELECT
+    psa.pid,
+    psa.datname,
+    psa.usename,
+    psa.application_name,
+    psa.client_addr::text AS client_addr,
+    psa.client_hostname,
+    psa.client_port,
+    psa.state,
+    psa.xact_start,
+    round(GREATEST(EXTRACT(EPOCH FROM (now() - psa.xact_start)), 0)::numeric, 4) AS transaction_duration_seconds,
+    GREATEST(now() - psa.xact_start, INTERVAL ''0 second'') AS transaction_duration,
+    psa.query_start,
+    round(GREATEST(EXTRACT(EPOCH FROM (now() - psa.query_start)), 0)::numeric, 4) AS query_duration_seconds,
+    GREATEST(now() - psa.query_start, INTERVAL ''0 second'') AS query_duration,
+    psa.wait_event_type,
+    psa.wait_event,
+    psa.backend_xid,
+    psa.backend_xmin,
+    psa.backend_type,
+    psa.state_change,
+    psa.query
+FROM pg_stat_activity psa
+WHERE psa.pid <> pg_backend_pid()
+  AND psa.xact_start IS NOT NULL
+  AND (
+      psa.state LIKE ''idle in transaction%%''
+      OR now() - psa.xact_start > make_interval(secs => $thread_time$)
+  )
+ORDER BY transaction_duration_seconds DESC, psa.pid;', 'postgres', 1, 3000, NOW(6), NOW(6)),
+('pgsql', 'pgsql_tablespace', 'PgSQL Top表空间默认SQL', '/dbdiagnostic/ Top表空间 PgSQL 默认 SQL，展示表级空间占用和 vacuum/analyze 信息。', 'WITH relation_sizes AS (
+    SELECT
+        namespace.nspname AS schema_name,
+        relation.relname AS table_name,
+        pg_get_userbyid(relation.relowner) AS owner_name,
+        pg_total_relation_size(relation.oid) AS total_size_bytes,
+        pg_relation_size(relation.oid) AS table_size_bytes,
+        pg_indexes_size(relation.oid) AS index_size_bytes,
+        relation.reltuples AS relation_estimated_rows,
+        GREATEST(
+            pg_total_relation_size(relation.oid)
+            - pg_relation_size(relation.oid)
+            - pg_indexes_size(relation.oid),
+            0
+        ) AS toast_size_bytes,
+        CASE
+            WHEN relation.reltuples >= 0 THEN relation.reltuples::bigint
+            ELSE COALESCE(stat.n_live_tup, 0)
+        END AS estimated_rows,
+        COALESCE(stat.n_dead_tup, 0) AS dead_tuples,
+        CASE
+            WHEN stat.relid IS NULL THEN ''未采集''
+            WHEN COALESCE(stat.n_live_tup, 0) = 0
+             AND COALESCE(stat.n_dead_tup, 0) = 0
+             AND stat.last_vacuum IS NULL
+             AND stat.last_autovacuum IS NULL
+             AND stat.last_analyze IS NULL
+             AND stat.last_autoanalyze IS NULL THEN ''统计为空''
+            ELSE ''已采集''
+        END AS stats_status,
+        stat.last_vacuum,
+        stat.last_autovacuum,
+        stat.last_analyze,
+        stat.last_autoanalyze
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    LEFT JOIN pg_stat_user_tables stat ON stat.relid = relation.oid
+    WHERE relation.relkind IN (''r'', ''p'', ''m'')
+      AND namespace.nspname NOT IN (''pg_catalog'', ''information_schema'')
+      AND namespace.nspname NOT LIKE ''pg_toast%%''
+      AND ($schema_name$ = '''' OR namespace.nspname = $schema_name$)
+)
+SELECT
+    schema_name,
+    table_name,
+    owner_name,
+    total_size_bytes,
+    pg_size_pretty(total_size_bytes) AS total_size,
+    table_size_bytes,
+    pg_size_pretty(table_size_bytes) AS table_size,
+    index_size_bytes,
+    pg_size_pretty(index_size_bytes) AS index_size,
+    toast_size_bytes,
+    pg_size_pretty(toast_size_bytes) AS toast_size,
+    estimated_rows,
+    dead_tuples,
+    stats_status,
+    last_vacuum,
+    last_autovacuum,
+    last_analyze,
+    last_autoanalyze
+FROM relation_sizes
+ORDER BY total_size_bytes DESC, schema_name, table_name
+LIMIT $limit$ OFFSET $offset$', 'postgres', 1, 3000, NOW(6), NOW(6)),
 ('pgsql', 'pgsql_trxandlocks', 'PgSQL锁信息默认SQL', '/dbdiagnostic/ 锁信息 PgSQL 默认 SQL，包含阻塞链。', 'WITH RECURSIVE lock_edges AS (
     SELECT
         activity.pid AS waiting_pid,
@@ -322,3 +416,463 @@ UNION ALL
 SELECT *
 FROM subscription_rows
 ORDER BY object_type, object_name, table_name NULLS FIRST;', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_replication', 'PgSQL复制状态默认SQL', '/dbdiagnostic/ 复制状态 PgSQL 默认 SQL，展示 pg_stat_replication 流复制状态和延迟。', 'SELECT
+    replication.pid,
+    replication.usename,
+    replication.application_name,
+    replication.client_addr::text AS client_addr,
+    replication.client_hostname,
+    replication.client_port,
+    replication.backend_start,
+    replication.backend_xmin,
+    replication.state,
+    replication.sent_lsn::text AS sent_lsn,
+    replication.write_lsn::text AS write_lsn,
+    replication.flush_lsn::text AS flush_lsn,
+    replication.replay_lsn::text AS replay_lsn,
+    replication.write_lag,
+    replication.flush_lag,
+    replication.replay_lag,
+    replication.sync_priority,
+    replication.sync_state,
+    replication.reply_time,
+    CASE
+        WHEN replication.sent_lsn IS NULL OR replication.replay_lsn IS NULL THEN NULL
+        ELSE pg_wal_lsn_diff(replication.sent_lsn, replication.replay_lsn)
+    END AS replay_lag_bytes,
+    CASE
+        WHEN replication.sent_lsn IS NULL OR replication.flush_lsn IS NULL THEN NULL
+        ELSE pg_wal_lsn_diff(replication.sent_lsn, replication.flush_lsn)
+    END AS flush_lag_bytes,
+    CASE
+        WHEN replication.sent_lsn IS NULL OR replication.write_lsn IS NULL THEN NULL
+        ELSE pg_wal_lsn_diff(replication.sent_lsn, replication.write_lsn)
+    END AS write_lag_bytes
+FROM pg_stat_replication replication
+ORDER BY replication.application_name, replication.client_addr::text, replication.pid;', 'postgres', 1, 3000, NOW(6), NOW(6)),
+('pgsql', 'pgsql_replication_slots', 'PgSQL复制Slot默认SQL', '/dbdiagnostic/ 复制Slot PgSQL 默认 SQL，展示 pg_replication_slots 状态和 WAL 保留风险。', 'SELECT
+    slot.slot_name,
+    slot.plugin,
+    slot.slot_type,
+    slot.datoid,
+    slot.database AS database_name,
+    slot.temporary,
+    slot.active,
+    slot.active_pid,
+    slot.xmin,
+    slot.catalog_xmin,
+    slot.restart_lsn::text AS restart_lsn,
+    slot.confirmed_flush_lsn::text AS confirmed_flush_lsn,
+    CASE
+        WHEN slot.restart_lsn IS NULL THEN NULL
+        ELSE pg_wal_lsn_diff(pg_current_wal_lsn(), slot.restart_lsn)
+    END AS retained_wal_bytes,
+    pg_size_pretty(
+        CASE
+            WHEN slot.restart_lsn IS NULL THEN 0
+            ELSE pg_wal_lsn_diff(pg_current_wal_lsn(), slot.restart_lsn)
+        END
+    ) AS retained_wal_size,
+    to_jsonb(slot)->>''wal_status'' AS wal_status,
+    NULLIF(to_jsonb(slot)->>''safe_wal_size'', '''')::numeric AS safe_wal_size
+FROM pg_replication_slots slot
+ORDER BY retained_wal_bytes DESC NULLS LAST, slot.slot_name;', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_vacuum', 'PgSQL Vacuum风险默认SQL', '/dbdiagnostic/ Vacuum风险 PgSQL 默认 SQL，展示表级 dead tuple、vacuum/analyze 时间和 xid 年龄风险。', 'WITH table_stats AS (
+    SELECT
+        namespace.nspname AS schema_name,
+        relation.relname AS table_name,
+        pg_get_userbyid(relation.relowner) AS owner_name,
+        COALESCE(stat.n_live_tup, 0) AS n_live_tup,
+        COALESCE(stat.n_dead_tup, 0) AS n_dead_tup,
+        CASE
+            WHEN COALESCE(stat.n_live_tup, 0) + COALESCE(stat.n_dead_tup, 0) = 0 THEN 0
+            ELSE round(
+                COALESCE(stat.n_dead_tup, 0)::numeric
+                * 100
+                / (COALESCE(stat.n_live_tup, 0) + COALESCE(stat.n_dead_tup, 0)),
+                2
+            )
+        END AS dead_tuple_ratio,
+        stat.last_vacuum,
+        stat.last_autovacuum,
+        stat.last_analyze,
+        stat.last_autoanalyze,
+        stat.vacuum_count,
+        stat.autovacuum_count,
+        stat.analyze_count,
+        stat.autoanalyze_count,
+        CASE
+            WHEN relation.relfrozenxid::text = ''0'' THEN 0
+            ELSE age(relation.relfrozenxid)
+        END AS relfrozenxid_age,
+        pg_total_relation_size(relation.oid) AS total_size_bytes,
+        pg_size_pretty(pg_total_relation_size(relation.oid)) AS total_size
+    FROM pg_class relation
+    JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+    LEFT JOIN pg_stat_user_tables stat ON stat.relid = relation.oid
+    WHERE relation.relkind IN (''r'', ''p'', ''m'')
+      AND namespace.nspname NOT IN (''pg_catalog'', ''information_schema'')
+      AND namespace.nspname NOT LIKE ''pg_toast%%''
+      AND ($schema_name$ = '''' OR namespace.nspname = $schema_name$)
+)
+SELECT
+    schema_name,
+    table_name,
+    owner_name,
+    n_live_tup,
+    n_dead_tup,
+    dead_tuple_ratio,
+    last_vacuum,
+    last_autovacuum,
+    last_analyze,
+    last_autoanalyze,
+    vacuum_count,
+    autovacuum_count,
+    analyze_count,
+    autoanalyze_count,
+    relfrozenxid_age,
+    total_size_bytes,
+    total_size,
+    CASE
+        WHEN relfrozenxid_age >= 1500000000 THEN ''xid高风险''
+        WHEN dead_tuple_ratio >= 30 AND n_dead_tup >= 100000 THEN ''dead tuple高风险''
+        WHEN last_autovacuum IS NULL AND last_vacuum IS NULL AND n_live_tup + n_dead_tup > 0 THEN ''未vacuum''
+        WHEN dead_tuple_ratio >= 10 AND n_dead_tup >= 10000 THEN ''需要关注''
+        ELSE ''正常''
+    END AS risk_level
+FROM table_stats
+ORDER BY
+    CASE
+        WHEN relfrozenxid_age >= 1500000000 THEN 1
+        WHEN dead_tuple_ratio >= 30 AND n_dead_tup >= 100000 THEN 2
+        WHEN last_autovacuum IS NULL AND last_vacuum IS NULL AND n_live_tup + n_dead_tup > 0 THEN 3
+        WHEN dead_tuple_ratio >= 10 AND n_dead_tup >= 10000 THEN 4
+        ELSE 5
+    END,
+    relfrozenxid_age DESC,
+    n_dead_tup DESC,
+    dead_tuple_ratio DESC,
+    total_size_bytes DESC
+LIMIT $limit$ OFFSET $offset$', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_progress', 'PgSQL Progress进度默认SQL', '/dbdiagnostic/ Progress进度 PgSQL 默认 SQL，展示正在运行的 vacuum、create index、analyze 等维护任务进度。', 'WITH progress_rows AS (
+    SELECT
+        ''vacuum''::text AS progress_type,
+        progress.pid,
+        progress.datname::text AS database_name,
+        concat_ws(''.'', namespace.nspname, relation.relname)::text AS relation_name,
+        progress.phase::text AS phase,
+        progress.heap_blks_scanned::bigint AS blocks_done,
+        progress.heap_blks_total::bigint AS blocks_total,
+        CASE
+            WHEN progress.heap_blks_total > 0 THEN round(progress.heap_blks_scanned::numeric * 100 / progress.heap_blks_total, 2)
+            ELSE NULL
+        END AS progress_percent,
+        progress.heap_blks_scanned::bigint AS heap_blks_scanned,
+        progress.heap_blks_total::bigint AS heap_blks_total,
+        progress.index_vacuum_count::bigint AS index_vacuum_count,
+        progress.max_dead_tuples::bigint AS max_dead_tuples,
+        progress.num_dead_tuples::bigint AS num_dead_tuples,
+        NULL::bigint AS blocks_total_alt,
+        NULL::bigint AS blocks_done_alt,
+        NULL::bigint AS tuples_total,
+        NULL::bigint AS tuples_done,
+        NULL::text AS command
+    FROM pg_stat_progress_vacuum progress
+    LEFT JOIN pg_class relation ON relation.oid = progress.relid
+    LEFT JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+
+    UNION ALL
+
+    SELECT
+        ''create_index''::text AS progress_type,
+        progress.pid,
+        progress.datname::text AS database_name,
+        concat_ws(''.'', namespace.nspname, relation.relname)::text AS relation_name,
+        progress.phase::text AS phase,
+        progress.blocks_done::bigint AS blocks_done,
+        progress.blocks_total::bigint AS blocks_total,
+        CASE
+            WHEN progress.blocks_total > 0 THEN round(progress.blocks_done::numeric * 100 / progress.blocks_total, 2)
+            WHEN progress.tuples_total > 0 THEN round(progress.tuples_done::numeric * 100 / progress.tuples_total, 2)
+            ELSE NULL
+        END AS progress_percent,
+        NULL::bigint AS heap_blks_scanned,
+        NULL::bigint AS heap_blks_total,
+        NULL::bigint AS index_vacuum_count,
+        NULL::bigint AS max_dead_tuples,
+        NULL::bigint AS num_dead_tuples,
+        progress.blocks_total::bigint AS blocks_total_alt,
+        progress.blocks_done::bigint AS blocks_done_alt,
+        progress.tuples_total::bigint AS tuples_total,
+        progress.tuples_done::bigint AS tuples_done,
+        progress.command::text AS command
+    FROM pg_stat_progress_create_index progress
+    LEFT JOIN pg_class relation ON relation.oid = progress.relid
+    LEFT JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+
+    UNION ALL
+
+    SELECT
+        ''analyze''::text AS progress_type,
+        progress.pid,
+        progress.datname::text AS database_name,
+        concat_ws(''.'', namespace.nspname, relation.relname)::text AS relation_name,
+        progress.phase::text AS phase,
+        progress.sample_blks_scanned::bigint AS blocks_done,
+        progress.sample_blks_total::bigint AS blocks_total,
+        CASE
+            WHEN progress.sample_blks_total > 0 THEN round(progress.sample_blks_scanned::numeric * 100 / progress.sample_blks_total, 2)
+            ELSE NULL
+        END AS progress_percent,
+        NULL::bigint AS heap_blks_scanned,
+        NULL::bigint AS heap_blks_total,
+        NULL::bigint AS index_vacuum_count,
+        NULL::bigint AS max_dead_tuples,
+        NULL::bigint AS num_dead_tuples,
+        progress.sample_blks_total::bigint AS blocks_total_alt,
+        progress.sample_blks_scanned::bigint AS blocks_done_alt,
+        NULL::bigint AS tuples_total,
+        NULL::bigint AS tuples_done,
+        NULL::text AS command
+    FROM pg_stat_progress_analyze progress
+    LEFT JOIN pg_class relation ON relation.oid = progress.relid
+    LEFT JOIN pg_namespace namespace ON namespace.oid = relation.relnamespace
+)
+SELECT
+    progress_rows.progress_type,
+    progress_rows.pid,
+    progress_rows.database_name,
+    progress_rows.relation_name,
+    progress_rows.phase,
+    COALESCE(progress_rows.progress_percent, 0) AS progress_percent,
+    COALESCE(progress_rows.blocks_done, 0) AS blocks_done,
+    COALESCE(progress_rows.blocks_total, 0) AS blocks_total,
+    progress_rows.heap_blks_scanned,
+    progress_rows.heap_blks_total,
+    progress_rows.index_vacuum_count,
+    progress_rows.max_dead_tuples,
+    progress_rows.num_dead_tuples,
+    progress_rows.blocks_done_alt,
+    progress_rows.blocks_total_alt,
+    progress_rows.tuples_done,
+    progress_rows.tuples_total,
+    progress_rows.command,
+    activity.usename,
+    activity.application_name,
+    activity.client_addr::text AS client_addr,
+    activity.query_start,
+    round(GREATEST(EXTRACT(EPOCH FROM (now() - activity.query_start)), 0)::numeric, 4) AS elapsed_time_seconds,
+    activity.wait_event_type,
+    activity.wait_event,
+    activity.query
+FROM progress_rows
+LEFT JOIN pg_stat_activity activity ON activity.pid = progress_rows.pid
+ORDER BY elapsed_time_seconds DESC NULLS LAST, progress_rows.progress_type, progress_rows.pid;', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_wait_events', 'PgSQL等待事件聚合默认SQL', '/dbdiagnostic/ 等待事件聚合 PgSQL 默认 SQL，基于 pg_stat_activity 聚合当前等待事件。', 'SELECT
+    COALESCE(activity.state, ''unknown'') AS state,
+    COALESCE(activity.wait_event_type, ''None'') AS wait_event_type,
+    COALESCE(activity.wait_event, ''None'') AS wait_event,
+    count(*) AS session_count,
+    round(
+        max(
+            CASE
+                WHEN activity.wait_event IS NULL THEN 0
+                ELSE GREATEST(EXTRACT(EPOCH FROM (now() - activity.state_change)), 0)
+            END
+        )::numeric,
+        4
+    ) AS max_wait_seconds,
+    round(
+        max(
+            CASE
+                WHEN activity.query_start IS NULL THEN 0
+                ELSE GREATEST(EXTRACT(EPOCH FROM (now() - activity.query_start)), 0)
+            END
+        )::numeric,
+        4
+    ) AS max_query_seconds,
+    count(*) FILTER (WHERE activity.state = ''active'') AS active_count,
+    count(*) FILTER (WHERE activity.state LIKE ''idle in transaction%%'') AS idle_in_transaction_count,
+    min(activity.query_start) AS oldest_query_start,
+    min(activity.state_change) AS oldest_state_change,
+    string_agg(DISTINCT activity.datname, '', '' ORDER BY activity.datname) AS database_names,
+    string_agg(DISTINCT activity.usename, '', '' ORDER BY activity.usename) AS user_names,
+    string_agg(DISTINCT activity.application_name, '', '' ORDER BY activity.application_name) AS application_names
+FROM pg_stat_activity activity
+WHERE activity.pid <> pg_backend_pid()
+GROUP BY
+    COALESCE(activity.state, ''unknown''),
+    COALESCE(activity.wait_event_type, ''None''),
+    COALESCE(activity.wait_event, ''None'')
+ORDER BY
+    session_count DESC,
+    max_wait_seconds DESC,
+    max_query_seconds DESC,
+    state,
+    wait_event_type,
+    wait_event;', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+INSERT IGNORE INTO dbdiagnostic_sql_template
+(db_type, diagnostic_type, template_name, description, `sql`, db_name, enabled, timeout_ms, create_time, update_time)
+VALUES
+('pgsql', 'pgsql_indexes', 'PgSQL索引诊断默认SQL', '/dbdiagnostic/ 索引诊断 PgSQL 默认 SQL，展示 invalid index、未使用大索引和顺序扫描较高对象。', 'WITH index_stats AS (
+    SELECT
+        namespace.nspname AS schema_name,
+        table_relation.relname AS table_name,
+        index_relation.relname AS index_name,
+        pg_get_userbyid(table_relation.relowner) AS owner_name,
+        index_relation.oid AS index_oid,
+        table_relation.oid AS table_oid,
+        pg_relation_size(index_relation.oid) AS index_size_bytes,
+        pg_size_pretty(pg_relation_size(index_relation.oid)) AS index_size,
+        pg_total_relation_size(table_relation.oid) AS table_size_bytes,
+        pg_size_pretty(pg_total_relation_size(table_relation.oid)) AS table_size,
+        COALESCE(index_stat.idx_scan, 0) AS idx_scan,
+        COALESCE(index_stat.idx_tup_read, 0) AS idx_tup_read,
+        COALESCE(index_stat.idx_tup_fetch, 0) AS idx_tup_fetch,
+        COALESCE(table_stat.seq_scan, 0) AS seq_scan,
+        COALESCE(table_stat.seq_tup_read, 0) AS seq_tup_read,
+        COALESCE(table_stat.n_live_tup, 0) AS n_live_tup,
+        pg_index.indisvalid AS is_valid,
+        pg_index.indisready AS is_ready,
+        pg_index.indisunique AS is_unique,
+        pg_index.indisprimary AS is_primary,
+        pg_get_indexdef(index_relation.oid) AS index_def
+    FROM pg_class table_relation
+    JOIN pg_namespace namespace ON namespace.oid = table_relation.relnamespace
+    JOIN pg_index ON pg_index.indrelid = table_relation.oid
+    JOIN pg_class index_relation ON index_relation.oid = pg_index.indexrelid
+    LEFT JOIN pg_stat_user_indexes index_stat ON index_stat.indexrelid = index_relation.oid
+    LEFT JOIN pg_stat_user_tables table_stat ON table_stat.relid = table_relation.oid
+    WHERE table_relation.relkind IN (''r'', ''p'', ''m'')
+      AND namespace.nspname NOT IN (''pg_catalog'', ''information_schema'')
+      AND namespace.nspname NOT LIKE ''pg_toast%%''
+      AND ($schema_name$ = '''' OR namespace.nspname = $schema_name$)
+),
+diagnostic_rows AS (
+    SELECT
+        ''invalid_index''::text AS diagnostic_type,
+        schema_name,
+        table_name,
+        index_name,
+        owner_name,
+        index_size_bytes,
+        index_size,
+        table_size_bytes,
+        table_size,
+        idx_scan,
+        idx_tup_read,
+        idx_tup_fetch,
+        seq_scan,
+        seq_tup_read,
+        n_live_tup,
+        is_valid,
+        is_ready,
+        is_unique,
+        is_primary,
+        index_def,
+        ''索引无效或未ready，需要检查并重建/删除''::text AS reason,
+        1 AS priority
+    FROM index_stats
+    WHERE NOT is_valid OR NOT is_ready
+
+    UNION ALL
+
+    SELECT
+        ''unused_index''::text AS diagnostic_type,
+        schema_name,
+        table_name,
+        index_name,
+        owner_name,
+        index_size_bytes,
+        index_size,
+        table_size_bytes,
+        table_size,
+        idx_scan,
+        idx_tup_read,
+        idx_tup_fetch,
+        seq_scan,
+        seq_tup_read,
+        n_live_tup,
+        is_valid,
+        is_ready,
+        is_unique,
+        is_primary,
+        index_def,
+        ''索引扫描次数为0且占用空间较大，建议结合业务确认是否可删除''::text AS reason,
+        2 AS priority
+    FROM index_stats
+    WHERE idx_scan = 0
+      AND NOT is_primary
+      AND index_size_bytes >= 1048576
+
+    UNION ALL
+
+    SELECT
+        ''high_seq_scan''::text AS diagnostic_type,
+        schema_name,
+        table_name,
+        index_name,
+        owner_name,
+        index_size_bytes,
+        index_size,
+        table_size_bytes,
+        table_size,
+        idx_scan,
+        idx_tup_read,
+        idx_tup_fetch,
+        seq_scan,
+        seq_tup_read,
+        n_live_tup,
+        is_valid,
+        is_ready,
+        is_unique,
+        is_primary,
+        index_def,
+        ''表顺序扫描次数较高，建议结合SQL和选择性评估索引设计''::text AS reason,
+        3 AS priority
+    FROM index_stats
+    WHERE seq_scan >= 100
+      AND seq_scan > idx_scan * 2
+)
+SELECT
+    diagnostic_type,
+    schema_name,
+    table_name,
+    index_name,
+    owner_name,
+    index_size,
+    index_size_bytes,
+    table_size,
+    table_size_bytes,
+    idx_scan,
+    idx_tup_read,
+    idx_tup_fetch,
+    seq_scan,
+    seq_tup_read,
+    n_live_tup,
+    is_valid,
+    is_ready,
+    is_unique,
+    is_primary,
+    reason,
+    index_def
+FROM diagnostic_rows
+ORDER BY priority, index_size_bytes DESC, seq_scan DESC, schema_name, table_name, index_name
+LIMIT $limit$ OFFSET $offset$', 'postgres', 1, 3000, NOW(6), NOW(6));

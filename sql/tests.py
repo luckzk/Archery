@@ -213,6 +213,330 @@ class TestView(TransactionTestCase):
         r = self.client.get(f"/dbdiagnostic/", data=data)
         self.assertEqual(r.status_code, 200)
 
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_tablespace_keeps_legacy_engine_signature(self, get_engine):
+        """非 PgSQL 表空间查询不传 PgSQL 专属过滤参数"""
+        engine = MagicMock()
+        engine.tablespace.return_value = ResultSet(
+            column_list=["table_schema", "table_name", "total_size"],
+            rows=[("db1", "tb1", 1)],
+        )
+        engine.tablespace_count.return_value = ResultSet(
+            column_list=["count"], rows=[(1,)]
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/tablespace/",
+            data={
+                "instance_name": self.ins.instance_name,
+                "offset": 0,
+                "limit": 10,
+                "db_name": "ignored",
+                "schema_name": "ignored",
+            },
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 0)
+        engine.tablespace.assert_called_once_with(0, 10)
+        engine.tablespace_count.assert_called_once_with()
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_tablespace_passes_pgsql_filters(self, get_engine):
+        """PgSQL 表空间查询传递数据库和 Schema 过滤参数"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.tablespace.return_value = ResultSet(
+            column_list=["schema_name", "table_name", "total_size_bytes", "total_size"],
+            rows=[("public", "tb1", 1, "1 byte")],
+        )
+        engine.tablespace_count.return_value = ResultSet(
+            column_list=["count"], rows=[(1,)]
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/tablespace/",
+            data={
+                "instance_name": self.ins.instance_name,
+                "offset": 2,
+                "limit": 5,
+                "db_name": "postgres",
+                "schema_name": "public",
+            },
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 0)
+        engine.tablespace.assert_called_once_with(
+            2, 5, db_name="postgres", schema_name="public"
+        )
+        engine.tablespace_count.assert_called_once_with(
+            db_name="postgres", schema_name="public"
+        )
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_replication(self, get_engine):
+        """PgSQL复制状态接口返回 engine 查询结果"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.replication_status.return_value = ResultSet(
+            column_list=[
+                "pid",
+                "usename",
+                "application_name",
+                "client_addr",
+                "state",
+                "sync_state",
+            ],
+            rows=[(1, "rep", "standby", "127.0.0.1", "streaming", "async")],
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_replication/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["rows"][0]["application_name"], "standby")
+        engine.replication_status.assert_called_once_with()
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_replication_slots(self, get_engine):
+        """PgSQL复制Slot接口返回 engine 查询结果"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.replication_slots.return_value = ResultSet(
+            column_list=["slot_name", "slot_type", "active", "restart_lsn"],
+            rows=[("slot1", "physical", True, "0/1")],
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_replication_slots/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["rows"][0]["slot_name"], "slot1")
+        engine.replication_slots.assert_called_once_with()
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_vacuum(self, get_engine):
+        """PgSQL Vacuum风险接口传递数据库和 Schema 过滤参数"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.vacuum_risk.return_value = ResultSet(
+            column_list=[
+                "schema_name",
+                "table_name",
+                "n_live_tup",
+                "n_dead_tup",
+                "dead_tuple_ratio",
+                "relfrozenxid_age",
+            ],
+            rows=[("public", "t1", 10, 2, 16.67, 1000)],
+        )
+        engine.vacuum_risk_count.return_value = ResultSet(
+            column_list=["total"], rows=[(1,)]
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_vacuum/",
+            data={
+                "instance_name": self.ins.instance_name,
+                "offset": 2,
+                "limit": 5,
+                "db_name": "dynadot",
+                "schema_name": "public",
+            },
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["rows"][0]["table_name"], "t1")
+        engine.vacuum_risk.assert_called_once_with(
+            offset=2, row_count=5, db_name="dynadot", schema_name="public"
+        )
+        engine.vacuum_risk_count.assert_called_once_with(
+            db_name="dynadot", schema_name="public"
+        )
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_progress(self, get_engine):
+        """PgSQL Progress进度接口返回 engine 查询结果"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.progress_status.return_value = ResultSet(
+            column_list=[
+                "progress_type",
+                "pid",
+                "database_name",
+                "relation_name",
+                "phase",
+                "progress_percent",
+                "blocks_done",
+                "blocks_total",
+                "query",
+            ],
+            rows=[("vacuum", 1, "postgres", "public.t1", "scanning heap", 50, 10, 20, "vacuum public.t1")],
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_progress/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["rows"][0]["progress_type"], "vacuum")
+        engine.progress_status.assert_called_once_with()
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_wait_events(self, get_engine):
+        """PgSQL等待事件聚合接口返回 engine 查询结果"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.wait_event_summary.return_value = ResultSet(
+            column_list=[
+                "state",
+                "wait_event_type",
+                "wait_event",
+                "session_count",
+                "max_wait_seconds",
+                "max_query_seconds",
+            ],
+            rows=[("active", "Lock", "relation", 2, 30, 60)],
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_wait_events/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["rows"][0]["wait_event_type"], "Lock")
+        engine.wait_event_summary.assert_called_once_with()
+
+    @patch("sql.db_diagnostic.get_engine")
+    def test_dbdiagnostic_pgsql_indexes(self, get_engine):
+        """PgSQL索引诊断接口传递数据库和 Schema 过滤参数"""
+        self.ins.db_type = "pgsql"
+        self.ins.save(update_fields=["db_type"])
+        engine = MagicMock()
+        engine.index_diagnostic.return_value = ResultSet(
+            column_list=[
+                "diagnostic_type",
+                "schema_name",
+                "table_name",
+                "index_name",
+                "index_size",
+                "idx_scan",
+                "seq_scan",
+                "is_valid",
+                "is_unique",
+                "reason",
+            ],
+            rows=[("unused_index", "public", "t1", "idx_t1", "1 MB", 0, 10, True, False, "unused")],
+        )
+        engine.index_diagnostic_count.return_value = ResultSet(
+            column_list=["total"], rows=[(1,)]
+        )
+        get_engine.return_value = engine
+
+        r = self.client.post(
+            "/db_diagnostic/pgsql_indexes/",
+            data={
+                "instance_name": self.ins.instance_name,
+                "offset": 2,
+                "limit": 5,
+                "db_name": "dynadot",
+                "schema_name": "public",
+            },
+        )
+
+        self.assertEqual(r.status_code, 200)
+        data = json.loads(r.content)
+        self.assertEqual(data["status"], 0)
+        self.assertEqual(data["total"], 1)
+        self.assertEqual(data["rows"][0]["index_name"], "idx_t1")
+        engine.index_diagnostic.assert_called_once_with(
+            offset=2, row_count=5, db_name="dynadot", schema_name="public"
+        )
+        engine.index_diagnostic_count.assert_called_once_with(
+            db_name="dynadot", schema_name="public"
+        )
+
+    def test_dbdiagnostic_replication_rejects_non_pgsql(self):
+        """复制链路接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_replication/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
+    def test_dbdiagnostic_vacuum_rejects_non_pgsql(self):
+        """Vacuum风险接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_vacuum/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
+    def test_dbdiagnostic_progress_rejects_non_pgsql(self):
+        """Progress进度接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_progress/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
+    def test_dbdiagnostic_wait_events_rejects_non_pgsql(self):
+        """等待事件聚合接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_wait_events/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
+    def test_dbdiagnostic_indexes_rejects_non_pgsql(self):
+        """索引诊断接口只支持 PgSQL 实例"""
+        r = self.client.post(
+            "/db_diagnostic/pgsql_indexes/",
+            data={"instance_name": self.ins.instance_name},
+        )
+
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(json.loads(r.content)["status"], 1)
+
     def test_instanceparam(self):
         """测试instance_param页面"""
         data = {}
