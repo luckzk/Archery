@@ -18,6 +18,19 @@ class ChartDao(object):
                 column_list.append(i[0])
         return {"column_list": column_list, "rows": rows}
 
+    @staticmethod
+    def __empty_result():
+        return {"column_list": [], "rows": []}
+
+    @staticmethod
+    def __table_exists(table_name):
+        return table_name in connection.introspection.table_names()
+
+    def __query_optional_table(self, table_name, sql):
+        if not self.__table_exists(table_name):
+            return self.__empty_result()
+        return self.__query(sql)
+
     # 获取连续时间
     @staticmethod
     def get_date_list(begin_date, end_date):
@@ -137,7 +150,7 @@ class ChartDao(object):
 from mysql_slow_query_review_history
 where checksum = '{checksum}'
 group by date(date_add(ts_min, interval 8 HOUR));"""
-        return self.__query(sql)
+        return self.__query_optional_table("mysql_slow_query_review_history", sql)
 
     # 慢日志历史趋势图(按时长)
     def slow_query_review_history_by_pct_95_time(self, checksum):
@@ -145,7 +158,7 @@ group by date(date_add(ts_min, interval 8 HOUR));"""
 from mysql_slow_query_review_history
 where checksum = '{checksum}'
 group by date(date_add(ts_min, interval 8 HOUR));"""
-        return self.__query(sql)
+        return self.__query_optional_table("mysql_slow_query_review_history", sql)
 
     # Redis慢日志历史趋势图(按次数)
     def redis_slow_query_review_history_by_cnt(self, checksum, hostnames):
@@ -155,7 +168,7 @@ from redis_slow_query_review_history
 where checksum = '{checksum}'
 and hostname in ('{hostname_list}')
 group by date(ts_min);"""
-        return self.__query(sql)
+        return self.__query_optional_table("redis_slow_query_review_history", sql)
 
     # Redis慢日志历史趋势图(按时长)
     def redis_slow_query_review_history_by_pct_95_time(self, checksum, hostnames):
@@ -165,7 +178,7 @@ from redis_slow_query_review_history
 where checksum = '{checksum}'
 and hostname in ('{hostname_list}')
 group by date(ts_min);"""
-        return self.__query(sql)
+        return self.__query_optional_table("redis_slow_query_review_history", sql)
 
     # 慢日志db/user维度统计
     def slow_query_count_by_db_by_user(self):
@@ -178,7 +191,7 @@ group by date(ts_min);"""
         and db_max is not null
         group by db_max,user_max order by sum(ts_cnt) desc limit 50;
         """
-        return self.__query(sql)
+        return self.__query_optional_table("mysql_slow_query_review_history", sql)
 
     # 慢日志db维度统计
     def slow_query_count_by_db(self):
@@ -191,7 +204,7 @@ group by date(ts_min);"""
         and db_max is not null
         group by db_max order by sum(ts_cnt) desc limit 50;
         """
-        return self.__query(sql)
+        return self.__query_optional_table("mysql_slow_query_review_history", sql)
 
     # 数据库实例类型统计
     def instance_count_by_type(self):

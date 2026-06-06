@@ -530,6 +530,32 @@ class ChartTest(TestCase):
         expected_rows = ((self.u2.display, 3), (self.u1.display, 2))
         self.assertEqual(result["rows"], expected_rows)
 
+    @patch("common.utils.chart_dao.connection.introspection.table_names")
+    def testOptionalSlowQueryTablesReturnEmptyResult(self, table_names):
+        """慢查询采集表未初始化时，报表查询返回空结果"""
+        table_names.return_value = []
+        dao = ChartDao()
+        expected_result = {"column_list": [], "rows": []}
+
+        self.assertEqual(dao.slow_query_count_by_db_by_user(), expected_result)
+        self.assertEqual(dao.slow_query_count_by_db(), expected_result)
+        self.assertEqual(
+            dao.slow_query_review_history_by_cnt("checksum"),
+            expected_result,
+        )
+        self.assertEqual(
+            dao.slow_query_review_history_by_pct_95_time("checksum"),
+            expected_result,
+        )
+        self.assertEqual(
+            dao.redis_slow_query_review_history_by_cnt("checksum", ["host1"]),
+            expected_result,
+        )
+        self.assertEqual(
+            dao.redis_slow_query_review_history_by_pct_95_time("checksum", ["host1"]),
+            expected_result,
+        )
+
 
 class AuthTest(TestCase):
     def setUp(self):
