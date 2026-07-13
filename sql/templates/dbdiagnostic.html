@@ -1,6 +1,75 @@
 {% extends "base.html" %}
 
 {% block content %}
+    <style>
+        #tab-content .dbdiagnostic-filter-toolbar {
+            margin: 0;
+            white-space: nowrap;
+        }
+
+        #tab-content .dbdiagnostic-filter-toolbar .form-group {
+            margin-right: 8px;
+            margin-bottom: 8px;
+            vertical-align: middle;
+        }
+
+        #tab-content .dbdiagnostic-filter-toolbar label {
+            margin-right: 4px;
+            margin-bottom: 0;
+            color: #555;
+            font-weight: 400;
+        }
+
+        #tab-content .dbdiagnostic-filter-toolbar .bootstrap-select {
+            width: 180px !important;
+        }
+
+        #tab-content .dbdiagnostic-filter-toolbar .btn {
+            margin-right: 4px;
+            margin-bottom: 8px;
+        }
+
+        #tab-content .fixed-table-toolbar .bs-bars,
+        #tab-content .fixed-table-toolbar .search,
+        #tab-content .fixed-table-toolbar .columns {
+            margin-top: 8px;
+            margin-bottom: 0;
+        }
+
+        #tab-content .fixed-table-toolbar .bs-bars .dbdiagnostic-filter-toolbar {
+            margin: 0;
+        }
+
+        @media (max-width: 1199px) {
+            #tab-content .dbdiagnostic-filter-toolbar .form-group {
+                margin-right: 6px;
+            }
+
+            #tab-content .dbdiagnostic-filter-toolbar .bootstrap-select {
+                width: 115px !important;
+            }
+
+            #tab-content .dbdiagnostic-filter-toolbar .btn {
+                margin-right: 2px;
+                padding-left: 8px;
+                padding-right: 8px;
+            }
+
+            #tab-content .fixed-table-toolbar .search input {
+                width: 160px;
+            }
+        }
+
+        @media (max-width: 991px) {
+            #tab-content .dbdiagnostic-filter-toolbar {
+                white-space: normal;
+            }
+
+            #tab-content .dbdiagnostic-filter-toolbar .bootstrap-select {
+                width: 120px !important;
+            }
+        }
+    </style>
     <!-- 自定义操作按钮-->
     <div id="process-toolbar" class="right" style="display:none;">
         <button id="kill_process" class="btn btn-default" type="button">终止会话</button>
@@ -484,7 +553,7 @@
                     cardView: false,                    //是否显示详细视图
                     detailView: false,                  //是否显示父子表
                     locale: 'zh-CN',                    //本地化
-                    toolbar: "#toolbar",               //指明自定义的toolbar
+                    toolbar: "#pgsql-tablespace-toolbar",               //指明自定义的toolbar
                     queryParamsType: 'limit',
                     //请求服务数据时所传参数
                     queryParams: function (params) {

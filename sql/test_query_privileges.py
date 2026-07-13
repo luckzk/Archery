@@ -610,12 +610,9 @@ class TestQueryPrivilegesCheck(TestCase):
             },
         )
 
-    @patch("sql.query_privileges._db_priv", return_value=False)
-    def test_query_priv_check_with_pgsql_db_priv(self, __db_priv):
-        """
-        测试用户权限校验,pgsql实例、普通用户
-        """
-        pgsql_instance = Instance(
+    @staticmethod
+    def _pgsql_instance():
+        return Instance(
             instance_name="pgsql",
             type="master",
             db_type="pgsql",
@@ -624,14 +621,73 @@ class TestQueryPrivilegesCheck(TestCase):
             user="some_user",
             password="some_str",
         )
+
+    @patch("sql.query_privileges._db_priv", return_value=1000)
+    def test_query_priv_check_pgsql_db_priv_pass(self, __db_priv):
+        """pgsql: 拥有整库权限时放行(向后兼容库级授权), 无需逐表校验"""
+        pgsql_instance = self._pgsql_instance()
         r = sql.query_privileges.query_priv_check(
             user=self.user,
             instance=pgsql_instance,
             db_name=self.db_name,
-            sql_content="select * from should_not_used.sql_users;",
+            sql_content="select * from public.sql_users;",
             limit_num=100,
         )
-        __db_priv.assert_called_with(self.user, pgsql_instance, self.db_name)
+        self.assertEqual(r["status"], 0)
+        self.assertEqual(r["data"]["limit_num"], 100)
+
+    @patch("sql.query_privileges._tb_priv", return_value=200)
+    @patch("sql.query_privileges._db_priv", return_value=False)
+    def test_query_priv_check_pgsql_tb_priv_pass(self, __db_priv, __tb_priv):
+        """pgsql: 无库权限但有对应 schema.table 表权限时放行"""
+        pgsql_instance = self._pgsql_instance()
+        r = sql.query_privileges.query_priv_check(
+            user=self.user,
+            instance=pgsql_instance,
+            db_name=self.db_name,
+            sql_content="select * from public.t1;",
+            limit_num=100,
+            schema_name="public",
+        )
+        self.assertEqual(r["status"], 0)
+        # 表名以 schema.table 形式校验
+        __tb_priv.assert_any_call(self.user, pgsql_instance, self.db_name, "public.t1")
+
+    @patch("sql.query_privileges._tb_priv", return_value=False)
+    @patch("sql.query_privileges._db_priv", return_value=False)
+    def test_query_priv_check_pgsql_tb_priv_denied(self, __db_priv, __tb_priv):
+        """pgsql: 既无库权限也无表权限时拒绝, status=2"""
+        pgsql_instance = self._pgsql_instance()
+        r = sql.query_privileges.query_priv_check(
+            user=self.user,
+            instance=pgsql_instance,
+            db_name=self.db_name,
+            sql_content="select * from public.t1;",
+            limit_num=100,
+            schema_name="public",
+        )
+        self.assertEqual(r["status"], 2)
+
+    @patch("sql.query_privileges._db_priv", return_value=False)
+    def test_query_priv_check_pgsql_cross_schema_bypass(self, __db_priv):
+        """pgsql: 仅授权 public.t1, 显式引用未授权的 secret.t2 应被拦截"""
+        pgsql_instance = self._pgsql_instance()
+
+        def fake_tb_priv(user, instance, db_name, tb_name):
+            return 200 if tb_name == "public.t1" else False
+
+        with patch(
+            "sql.query_privileges._tb_priv", side_effect=fake_tb_priv
+        ):
+            r = sql.query_privileges.query_priv_check(
+                user=self.user,
+                instance=pgsql_instance,
+                db_name=self.db_name,
+                sql_content="select * from secret.t2;",
+                limit_num=100,
+                schema_name="public",
+            )
+        self.assertEqual(r["status"], 2)
 
     @patch("sql.query_privileges._db_priv", return_value=1000)
     def test_query_priv_check_not_mysql_db_priv_exist(self, __db_priv):

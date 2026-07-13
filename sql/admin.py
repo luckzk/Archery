@@ -13,6 +13,9 @@ from .models import (
     SqlWorkflow,
     SqlWorkflowContent,
     QueryLog,
+    SqlQueryKnowledge,
+    SqlQueryFavorite,
+    SqlQueryPreference,
     DataMaskingColumns,
     DataMaskingRules,
     AliyunRdsConfig,
@@ -33,6 +36,10 @@ from .models import (
     TwoFactorAuthConfig,
     PgSQLMetricDefinition,
     DBDiagnosticSQLTemplate,
+    PgSQLMigrationTask,
+    PgSQLMigrationTaskLog,
+    PgSQLMigrationSequenceResult,
+    PgSQLMigrationDataCheckResult,
 )
 
 from sql.form import TunnelForm, InstanceForm
@@ -447,6 +454,61 @@ class QueryLogAdmin(admin.ModelAdmin):
     )
 
 
+@admin.register(SqlQueryKnowledge)
+class SqlQueryKnowledgeAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "scene",
+        "engines",
+        "username",
+        "instance_name",
+        "db_name",
+        "sys_time",
+    )
+    search_fields = ("name", "scene", "sql", "username", "user_display")
+    list_filter = ("username", "scene", "engines")
+    readonly_fields = ("create_time", "sys_time")
+
+
+@admin.register(SqlQueryFavorite)
+class SqlQueryFavoriteAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "alias",
+        "username",
+        "instance_name",
+        "db_name",
+        "source_query_log_id",
+        "sys_time",
+    )
+    search_fields = (
+        "alias",
+        "sql",
+        "username",
+        "user_display",
+        "instance_name",
+        "db_name",
+    )
+    list_filter = ("username", "instance_name", "db_name")
+    readonly_fields = ("create_time", "sys_time")
+
+
+@admin.register(SqlQueryPreference)
+class SqlQueryPreferenceAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "username",
+        "theme",
+        "resource_tab",
+        "mysql_tab",
+        "sys_time",
+    )
+    search_fields = ("username", "user_display")
+    list_filter = ("theme", "resource_tab", "mysql_tab")
+    readonly_fields = ("create_time", "sys_time")
+
+
 # 查询权限列表
 @admin.register(QueryPrivileges)
 class QueryPrivilegesAdmin(admin.ModelAdmin):
@@ -713,3 +775,50 @@ class AuditEntryAdmin(admin.ModelAdmin):
         "action_time",
     )
     list_filter = ("user_id", "user_name", "user_display", "action", "extra_info")
+
+
+@admin.register(PgSQLMigrationTask)
+class PgSQLMigrationTaskAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "name",
+        "source_instance",
+        "target_instance",
+        "status",
+        "user_display",
+        "create_time",
+        "update_time",
+    )
+    search_fields = ("name", "description", "user_name", "user_display")
+    list_filter = ("status", "source_instance", "target_instance")
+
+
+@admin.register(PgSQLMigrationTaskLog)
+class PgSQLMigrationTaskLogAdmin(admin.ModelAdmin):
+    list_display = ("id", "task", "operation", "status", "start_time", "finish_time")
+    search_fields = ("task__name", "operation", "message", "details_json")
+    list_filter = ("operation", "status")
+
+
+@admin.register(PgSQLMigrationSequenceResult)
+class PgSQLMigrationSequenceResultAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "task",
+        "operation",
+        "sequence_schema",
+        "sequence_name",
+        "target_value",
+        "should_apply",
+        "status",
+        "create_time",
+    )
+    search_fields = ("task__name", "sequence_schema", "sequence_name", "table_name")
+    list_filter = ("operation", "status", "should_apply")
+
+
+@admin.register(PgSQLMigrationDataCheckResult)
+class PgSQLMigrationDataCheckResultAdmin(admin.ModelAdmin):
+    list_display = ("id", "task", "schema_name", "table_name", "status", "create_time")
+    search_fields = ("task__name", "schema_name", "table_name", "checks_json")
+    list_filter = ("status",)

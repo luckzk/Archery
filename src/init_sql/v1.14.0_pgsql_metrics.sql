@@ -1,3 +1,84 @@
+-- SQL查询页用户自定义数据
+CREATE TABLE IF NOT EXISTS sqlquery_knowledge (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(30) NOT NULL,
+  user_display VARCHAR(50) NOT NULL DEFAULT '',
+  name VARCHAR(64) NOT NULL,
+  scene VARCHAR(64) NOT NULL DEFAULT '自定义',
+  engines VARCHAR(255) NOT NULL DEFAULT '通用',
+  `sql` LONGTEXT NOT NULL,
+  instance_name VARCHAR(50) NOT NULL DEFAULT '',
+  db_name VARCHAR(64) NOT NULL DEFAULT '',
+  create_time DATETIME(6) NOT NULL,
+  sys_time DATETIME(6) NOT NULL,
+  KEY idx_sqlquery_knowledge_user_time (username, sys_time),
+  KEY idx_sqlquery_knowledge_user_name (username, name)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 兼容早期临时存放在 query_log 的知识库记录，迁入正式表。
+INSERT INTO sqlquery_knowledge
+(username, user_display, name, scene, engines, `sql`, instance_name, db_name, create_time, sys_time)
+SELECT
+  q.username,
+  q.user_display,
+  COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.name')), ''), '未命名') AS name,
+  COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.scene')), ''), '自定义') AS scene,
+  COALESCE(NULLIF(REPLACE(REPLACE(REPLACE(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.engines')), '[', ''), ']', ''), '"', ''), ''), '通用') AS engines,
+  COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.sql')), ''), q.sqllog) AS `sql`,
+  q.instance_name,
+  q.db_name,
+  q.create_time,
+  q.sys_time
+FROM query_log q
+WHERE q.alias = '__sqlquery_knowledge__'
+  AND JSON_VALID(q.sqllog)
+  AND NOT EXISTS (
+    SELECT 1
+    FROM sqlquery_knowledge k
+    WHERE k.username = q.username
+      AND k.name = COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.name')), ''), '未命名')
+      AND k.`sql` = COALESCE(NULLIF(JSON_UNQUOTE(JSON_EXTRACT(q.sqllog, '$.sql')), ''), q.sqllog)
+	  );
+
+CREATE TABLE IF NOT EXISTS sqlquery_favorite (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(30) NOT NULL,
+  user_display VARCHAR(50) NOT NULL DEFAULT '',
+  alias VARCHAR(64) NOT NULL DEFAULT '',
+  `sql` LONGTEXT NOT NULL,
+  instance_name VARCHAR(50) NOT NULL DEFAULT '',
+  db_name VARCHAR(64) NOT NULL DEFAULT '',
+  source_query_log_id INT NULL,
+  create_time DATETIME(6) NOT NULL,
+  sys_time DATETIME(6) NOT NULL,
+  KEY idx_sqlquery_favorite_user_time (username, sys_time),
+  KEY idx_sqlquery_favorite_user_alias (username, alias),
+  KEY idx_sqlquery_favorite_user_source (username, source_query_log_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 兼容旧版 query_log.favorite 收藏，迁入正式收藏表。
+INSERT INTO sqlquery_favorite
+(username, user_display, alias, `sql`, instance_name, db_name, source_query_log_id, create_time, sys_time)
+SELECT
+  q.username,
+  q.user_display,
+  q.alias,
+  q.sqllog,
+  q.instance_name,
+  q.db_name,
+  q.id,
+  q.create_time,
+  q.sys_time
+FROM query_log q
+WHERE q.favorite = 1
+  AND q.alias <> '__sqlquery_knowledge__'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM sqlquery_favorite f
+    WHERE f.username = q.username
+      AND f.source_query_log_id = q.id
+  );
+
 -- PostgreSQL 实时指标定义表
 CREATE TABLE IF NOT EXISTS pgsql_metric_definition (
   id INT AUTO_INCREMENT PRIMARY KEY,
@@ -897,3 +978,94 @@ LEFT JOIN pg_namespace namespace ON namespace.oid = installed.extnamespace
 ORDER BY
     (installed.oid IS NOT NULL) DESC,
     available.name;', 'postgres', 1, 3000, NOW(6), NOW(6));
+
+
+-- PgSQL 手动迁移助手任务表
+CREATE TABLE IF NOT EXISTS pgsql_migration_task (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  source_instance_id INT NOT NULL,
+  target_instance_id INT NOT NULL,
+  schemas_json LONGTEXT NOT NULL,
+  tables_json LONGTEXT NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT 'draft',
+  description LONGTEXT NOT NULL,
+  user_name VARCHAR(30) NOT NULL DEFAULT '',
+  user_display VARCHAR(50) NOT NULL DEFAULT '',
+  create_time DATETIME(6) NOT NULL,
+  update_time DATETIME(6) NOT NULL,
+  KEY idx_pgsql_migration_source_instance (source_instance_id),
+  KEY idx_pgsql_migration_target_instance (target_instance_id),
+  KEY idx_pgsql_migration_status (status),
+  CONSTRAINT fk_pgsql_migration_source_instance FOREIGN KEY (source_instance_id) REFERENCES sql_instance(id) ON DELETE CASCADE,
+  CONSTRAINT fk_pgsql_migration_target_instance FOREIGN KEY (target_instance_id) REFERENCES sql_instance(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pgsql_migration_task_log (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  operation VARCHAR(64) NOT NULL,
+  status VARCHAR(32) NOT NULL,
+  message LONGTEXT NOT NULL,
+  details_json LONGTEXT NOT NULL,
+  start_time DATETIME(6) NOT NULL,
+  finish_time DATETIME(6) NULL,
+  KEY idx_pgsql_migration_log_task (task_id),
+  CONSTRAINT fk_pgsql_migration_log_task FOREIGN KEY (task_id) REFERENCES pgsql_migration_task(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pgsql_migration_sequence_result (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  operation VARCHAR(20) NOT NULL,
+  sequence_schema VARCHAR(64) NOT NULL,
+  sequence_name VARCHAR(128) NOT NULL,
+  table_schema VARCHAR(64) NOT NULL DEFAULT '',
+  table_name VARCHAR(128) NOT NULL DEFAULT '',
+  column_name VARCHAR(128) NOT NULL DEFAULT '',
+  source_last_value BIGINT NULL,
+  target_current_value BIGINT NULL,
+  target_value BIGINT NULL,
+  should_apply TINYINT(1) NOT NULL DEFAULT 0,
+  reason VARCHAR(255) NOT NULL DEFAULT '',
+  setval_sql LONGTEXT NOT NULL,
+  status VARCHAR(32) NOT NULL DEFAULT '',
+  error LONGTEXT NOT NULL,
+  create_time DATETIME(6) NOT NULL,
+  KEY idx_pgsql_migration_sequence_task (task_id),
+  CONSTRAINT fk_pgsql_migration_sequence_task FOREIGN KEY (task_id) REFERENCES pgsql_migration_task(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE IF NOT EXISTS pgsql_migration_data_check_result (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  task_id INT NOT NULL,
+  schema_name VARCHAR(64) NOT NULL,
+  table_name VARCHAR(128) NOT NULL,
+  status VARCHAR(20) NOT NULL,
+  checks_json LONGTEXT NOT NULL,
+  create_time DATETIME(6) NOT NULL,
+  KEY idx_pgsql_migration_data_check_task (task_id),
+  CONSTRAINT fk_pgsql_migration_data_check_task FOREIGN KEY (task_id) REFERENCES pgsql_migration_task(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- SQLQuery 用户界面偏好
+CREATE TABLE IF NOT EXISTS sqlquery_preference (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  username VARCHAR(30) NOT NULL,
+  user_display VARCHAR(50) NOT NULL DEFAULT '',
+  theme VARCHAR(20) NOT NULL DEFAULT 'archery',
+  resource_tab VARCHAR(20) NOT NULL DEFAULT 'table',
+  mysql_tab VARCHAR(20) NOT NULL DEFAULT 'knowledge',
+  create_time DATETIME(6) NOT NULL,
+  sys_time DATETIME(6) NOT NULL,
+  UNIQUE KEY uk_sqlquery_preference_username (username),
+  KEY idx_sqlquery_preference_sys_time (sys_time)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- PgSQL 手动迁移助手权限
+SET @content_type_id=(SELECT id FROM django_content_type WHERE app_label='sql' AND model='permission');
+INSERT IGNORE INTO auth_permission (name, content_type_id, codename)
+VALUES
+  ('菜单 PgSQL迁移助手', @content_type_id, 'menu_pgsql_migration'),
+  ('管理PgSQL迁移准备任务', @content_type_id, 'pgsql_migration_mgt'),
+  ('执行PgSQL迁移检查和设置', @content_type_id, 'pgsql_migration_execute');

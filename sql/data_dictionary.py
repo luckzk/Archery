@@ -91,16 +91,16 @@ def table_info(request):
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def view_list(request):
-    """数据字典获取视图列表（仅MySQL）"""
-    return _dict_list(request, db_type_required="mysql", engine_method="get_views_list")
+    """数据字典获取视图列表"""
+    return _dict_list(request, db_type_required=None, engine_method="get_views_list")
 
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def view_info(request):
-    """数据字典获取视图详情（仅MySQL）"""
+    """数据字典获取视图详情"""
     return _dict_detail(
         request,
-        db_type_required="mysql",
+        db_type_required=None,
         engine_method="get_view_detail",
         name_param="view_name",
         engine_kwarg="view_name",
@@ -108,19 +108,67 @@ def view_info(request):
 
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
-def trigger_list(request):
-    """数据字典获取触发器列表（仅MySQL）"""
+def materialized_view_list(request):
+    """数据字典获取物化视图列表"""
     return _dict_list(
-        request, db_type_required="mysql", engine_method="get_triggers_list"
+        request,
+        db_type_required="pgsql",
+        engine_method="get_materialized_views_list",
+        unsupported_msg="仅PgSQL支持该功能",
+    )
+
+
+@permission_required("sql.menu_data_dictionary", raise_exception=True)
+def materialized_view_info(request):
+    """数据字典获取物化视图详情"""
+    return _dict_detail(
+        request,
+        db_type_required="pgsql",
+        engine_method="get_materialized_view_detail",
+        name_param="matview_name",
+        engine_kwarg="matview_name",
+        unsupported_msg="仅PgSQL支持该功能",
+    )
+
+
+@permission_required("sql.menu_data_dictionary", raise_exception=True)
+def sequence_list(request):
+    """数据字典获取序列列表"""
+    return _dict_list(
+        request,
+        db_type_required="pgsql",
+        engine_method="get_sequences_list",
+        unsupported_msg="仅PgSQL支持该功能",
+    )
+
+
+@permission_required("sql.menu_data_dictionary", raise_exception=True)
+def sequence_info(request):
+    """数据字典获取序列详情"""
+    return _dict_detail(
+        request,
+        db_type_required="pgsql",
+        engine_method="get_sequence_detail",
+        name_param="sequence_name",
+        engine_kwarg="sequence_name",
+        unsupported_msg="仅PgSQL支持该功能",
+    )
+
+
+@permission_required("sql.menu_data_dictionary", raise_exception=True)
+def trigger_list(request):
+    """数据字典获取触发器列表"""
+    return _dict_list(
+        request, db_type_required=None, engine_method="get_triggers_list"
     )
 
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def trigger_info(request):
-    """数据字典获取触发器详情（仅MySQL）"""
+    """数据字典获取触发器详情"""
     return _dict_detail(
         request,
-        db_type_required="mysql",
+        db_type_required=None,
         engine_method="get_trigger_detail",
         name_param="trigger_name",
         engine_kwarg="trigger_name",
@@ -129,18 +177,18 @@ def trigger_info(request):
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def procedure_list(request):
-    """数据字典获取存储过程列表（仅MySQL）"""
+    """数据字典获取存储过程列表"""
     return _dict_list(
-        request, db_type_required="mysql", engine_method="get_procedures_list"
+        request, db_type_required=None, engine_method="get_procedures_list"
     )
 
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def procedure_info(request):
-    """数据字典获取存储过程详情（仅MySQL）"""
+    """数据字典获取存储过程详情"""
     return _dict_detail(
         request,
-        db_type_required="mysql",
+        db_type_required=None,
         engine_method="get_procedure_detail",
         name_param="proc_name",
         engine_kwarg="proc_name",
@@ -149,18 +197,18 @@ def procedure_info(request):
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def function_list(request):
-    """数据字典获取函数列表（仅MySQL）"""
+    """数据字典获取函数列表"""
     return _dict_list(
-        request, db_type_required="mysql", engine_method="get_functions_list"
+        request, db_type_required=None, engine_method="get_functions_list"
     )
 
 
 @permission_required("sql.menu_data_dictionary", raise_exception=True)
 def function_info(request):
-    """数据字典获取函数详情（仅MySQL）"""
+    """数据字典获取函数详情"""
     return _dict_detail(
         request,
-        db_type_required="mysql",
+        db_type_required=None,
         engine_method="get_function_detail",
         name_param="func_name",
         engine_kwarg="func_name",
@@ -187,14 +235,15 @@ def event_info(request):
     )
 
 
-def _dict_list(request, db_type_required, engine_method):
+def _dict_list(request, db_type_required, engine_method, unsupported_msg="仅MySQL支持该功能"):
     """通用数据字典对象列表接口"""
     instance_name = request.GET.get("instance_name", "")
     db_name = request.GET.get("db_name", "")
+    schema_name = request.GET.get("schema_name", "")
     db_type = request.GET.get("db_type", "")
 
     if db_type_required and db_type != db_type_required:
-        res = {"status": 1, "msg": "仅MySQL支持该功能"}
+        res = {"status": 1, "msg": unsupported_msg}
         return HttpResponse(
             json.dumps(res, cls=ExtendJSONEncoder, bigint_as_string=True),
             content_type="application/json",
@@ -207,7 +256,10 @@ def _dict_list(request, db_type_required, engine_method):
             )
             query_engine = get_engine(instance=instance)
             db_name = query_engine.escape_string(db_name)
-            data = getattr(query_engine, engine_method)(db_name=db_name)
+            schema_name = query_engine.escape_string(schema_name)
+            data = getattr(query_engine, engine_method)(
+                db_name=db_name, schema_name=schema_name
+            )
             res = {"status": 0, "data": data}
         except Instance.DoesNotExist:
             res = {"status": 1, "msg": "Instance.DoesNotExist"}
@@ -221,31 +273,47 @@ def _dict_list(request, db_type_required, engine_method):
     )
 
 
-def _dict_detail(request, db_type_required, engine_method, name_param, engine_kwarg):
+def _dict_detail(
+    request,
+    db_type_required,
+    engine_method,
+    name_param,
+    engine_kwarg,
+    unsupported_msg="仅MySQL支持该功能",
+):
     """通用数据字典对象详情接口"""
     instance_name = request.GET.get("instance_name", "")
     db_name = request.GET.get("db_name", "")
+    schema_name = request.GET.get("schema_name", "")
     obj_name = request.GET.get(name_param, "")
+    object_id = request.GET.get("object_id", "")
     db_type = request.GET.get("db_type", "")
 
     if db_type_required and db_type != db_type_required:
-        res = {"status": 1, "msg": "仅MySQL支持该功能"}
+        res = {"status": 1, "msg": unsupported_msg}
         return HttpResponse(
             json.dumps(res, cls=ExtendJSONEncoder, bigint_as_string=True),
             content_type="application/json",
         )
 
-    if instance_name and db_name and obj_name:
+    if instance_name and db_name and (obj_name or object_id):
         try:
             instance = Instance.objects.get(
                 instance_name=instance_name, db_type=db_type
             )
             query_engine = get_engine(instance=instance)
             db_name = query_engine.escape_string(db_name)
+            schema_name = query_engine.escape_string(schema_name)
             obj_name = query_engine.escape_string(obj_name)
-            data = getattr(query_engine, engine_method)(
-                **{"db_name": db_name, engine_kwarg: obj_name}
-            )
+            object_id = query_engine.escape_string(object_id)
+            detail_kwargs = {
+                "db_name": db_name,
+                "schema_name": schema_name,
+                engine_kwarg: obj_name,
+            }
+            if object_id:
+                detail_kwargs["object_id"] = object_id
+            data = getattr(query_engine, engine_method)(**detail_kwargs)
             res = {"status": 0, "data": data}
         except Instance.DoesNotExist:
             res = {"status": 1, "msg": "Instance.DoesNotExist"}

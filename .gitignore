@@ -27,5 +27,9 @@ common/static/dbdiagnostic/*
 !common/static/dbdiagnostic/js/
 common/static/dbdiagnostic/js/*
 !common/static/dbdiagnostic/js/*.js
+!common/static/sqlquery/
+common/static/sqlquery/*
+!common/static/sqlquery/*.css
+!common/static/sqlquery/*.js
 local_settings.py
 nohup.out

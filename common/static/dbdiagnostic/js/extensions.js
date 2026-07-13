@@ -135,7 +135,7 @@ function get_pgsql_extensions_list() {
             cardView: false,
             detailView: false,
             locale: 'zh-CN',
-            toolbar: "#toolbar",
+            toolbar: "#pgsql-extensions-toolbar",
             queryParamsType: 'limit',
             queryParams: function (params) {
                 return {

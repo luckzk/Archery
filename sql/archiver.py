@@ -29,6 +29,7 @@ from common.utils.timer import FuncTimer
 from sql.engines import get_engine
 from sql.notify import notify_for_audit
 from sql.plugins.pt_archiver import PtArchiver
+from sql.tool_plugins import tool_plugin_enabled_required
 from sql.utils.resource_group import user_instances, user_groups
 from sql.models import ArchiveConfig, ArchiveLog, Instance, ResourceGroup
 from sql.utils.workflow_audit import get_auditor, AuditException, Audit
@@ -37,6 +38,7 @@ logger = logging.getLogger("default")
 __author__ = "hhyo"
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.menu_archive", raise_exception=True)
 def archive_list(request):
     """
@@ -114,6 +116,7 @@ def archive_list(request):
     )
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.archive_apply", raise_exception=True)
 def archive_apply(request):
     """申请归档实例数据"""
@@ -234,6 +237,7 @@ def archive_apply(request):
     )
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.archive_review", raise_exception=True)
 def archive_audit(request):
     """
@@ -476,6 +480,7 @@ def archive(archive_id):
         raise Exception(f"{error_info}\n{statistics}")
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.menu_archive", raise_exception=True)
 def archive_log(request):
     """获取归档日志列表"""
@@ -512,6 +517,7 @@ def archive_log(request):
     )
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.archive_mgt", raise_exception=True)
 def archive_switch(request):
     """开启关闭归档任务"""
@@ -525,6 +531,7 @@ def archive_switch(request):
         return JsonResponse({"status": 1, "msg": f"{msg}", "data": {}})
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.archive_mgt", raise_exception=True)
 def archive_once(request):
     """单次立即调用归档任务"""

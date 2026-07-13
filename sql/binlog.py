@@ -14,6 +14,7 @@ from django_q.tasks import async_task
 
 from common.utils.extend_json_encoder import ExtendJSONEncoder
 from sql.engines import get_engine
+from sql.tool_plugins import tool_plugin_enabled_required
 
 from sql.plugins.my2sql import My2SQL
 from sql.notify import notify_for_my2sql
@@ -22,6 +23,7 @@ from .models import Instance
 logger = logging.getLogger("default")
 
 
+@tool_plugin_enabled_required("my2sql")
 @permission_required("sql.menu_my2sql", raise_exception=True)
 def binlog_list(request):
     """
@@ -86,6 +88,7 @@ def del_binlog(request):
     )
 
 
+@tool_plugin_enabled_required("my2sql")
 @permission_required("sql.menu_my2sql", raise_exception=True)
 def my2sql(request):
     """

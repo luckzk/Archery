@@ -169,7 +169,7 @@ function get_pgsql_indexes_list() {
                 return '<h5>索引定义</h5><pre>' + (row.index_def || '') + '</pre>';
             },
             locale: 'zh-CN',
-            toolbar: "#toolbar",
+            toolbar: "#pgsql-indexes-toolbar",
             queryParamsType: 'limit',
             queryParams: function (params) {
                 return {

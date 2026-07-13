@@ -3,6 +3,7 @@ from sql.utils.workflow_audit import Audit
 from archery import display_version, settings
 from common.config import SysConfig
 from sql.models import TwoFactorAuthConfig
+from sql.tool_plugins import tool_plugins_for_user
 
 
 def global_info(request):
@@ -37,4 +38,5 @@ def global_info(request):
         "custom_title_suffix": custom_title_suffix,
         "announcement_content": announcement_content,
         "twofa_type": twofa_type,
+        "tool_plugins": tool_plugins_for_user(getattr(request, "user", None)),
     }

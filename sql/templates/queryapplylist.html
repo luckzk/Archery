@@ -71,6 +71,13 @@
                         </select>
                     </div>
 
+                    <div id="schema_name_div" class="form-group" style="display: none">
+                        <select id="schema_name" name="schema_name" data-live-search="true"
+                                title="请选择模式(schema):"
+                                class="form-control selectpicker show-tick bs-select-hidden ">
+                        </select>
+                    </div>
+
                     <div id="table_div" class="form-group">
                         <select id="table_name" name="table_name"
                                 class="form-control selectpicker show-tick bs-select-hidden" data-live-search="true"
@@ -366,12 +373,15 @@
                     resource_type: "database"
                 },
                 complete: function () {
-                    // 仅MySQL支持限制到表级权限
+                    // MySQL、PgSQL 支持限制到表级权限
                     var optgroup = $('#instance_name :selected').parent().attr('label');
                     $("#priv_type").empty();
                     if (optgroup === "MySQL") {
                         $('#priv_type').append("<option value=\"1\">DATABASE</option>");
                         $('#priv_type').append("<option value=\"2\" selected=\"selected\">TABLE</option>");
+                    } else if (optgroup === "PgSQL") {
+                        $('#priv_type').append("<option value=\"1\" selected=\"selected\">DATABASE</option>");
+                        $('#priv_type').append("<option value=\"2\">TABLE</option>");
                     } else {
                         $('#priv_type').append("<option value=\"1\" selected=\"selected\">DATABASE</option>");
                     }
@@ -404,25 +414,39 @@
             });
         });
 
-        //数据库变更获取表名称
-        $("#db_name").change(function () {
+        //当前选中实例的引擎类型(optgroup label)
+        function currentEngineLabel() {
+            return $('#instance_name :selected').parent().attr('label');
+        }
+
+        //加载表列表; pgsql 传入 schema, 表 option 的 value 使用 schema.table
+        function loadTables(schema_name) {
+            var reqData = {
+                instance_name: $("#instance_name").val(),
+                db_name: $("#db_name").val(),
+                resource_type: "table"
+            };
+            if (schema_name) {
+                reqData.schema_name = schema_name;
+            }
             $.ajax({
                 type: "get",
                 url: "/instance/instance_resource/",
                 dataType: "json",
-                data: {
-                    instance_name: $("#instance_name").val(),
-                    db_name: $("#db_name").val(),
-                    resource_type: "table"
-                },
-                complete: function () {
-                },
+                data: reqData,
                 success: function (data) {
                     if (data.status === 0) {
                         var result = data.data;
                         $("#table_name").empty();
                         for (var i = 0; i < result.length; i++) {
-                            var name = "<option>" + result[i] + "</option>";
+                            var name;
+                            if (schema_name) {
+                                //pgsql: 存储/提交为 schema.table
+                                var full = schema_name + "." + result[i];
+                                name = "<option value=\"" + full + "\">" + full + "</option>";
+                            } else {
+                                name = "<option>" + result[i] + "</option>";
+                            }
                             $("#table_name").append(name);
                         }
                         $('#table_name').selectpicker('render');
@@ -435,14 +459,58 @@
                     alert(errorThrown);
                 }
             });
+        }
+
+        //数据库变更: MySQL 直接取表; PgSQL 先取 schema 列表
+        $("#db_name").change(function () {
+            if (currentEngineLabel() === "PgSQL") {
+                $.ajax({
+                    type: "get",
+                    url: "/instance/instance_resource/",
+                    dataType: "json",
+                    data: {
+                        instance_name: $("#instance_name").val(),
+                        db_name: $("#db_name").val(),
+                        resource_type: "schema"
+                    },
+                    success: function (data) {
+                        if (data.status === 0) {
+                            var result = data.data;
+                            $("#schema_name").empty();
+                            for (var i = 0; i < result.length; i++) {
+                                $("#schema_name").append("<option>" + result[i] + "</option>");
+                            }
+                            $('#schema_name').selectpicker('render');
+                            $('#schema_name').selectpicker('refresh');
+                            $('#schema_name').selectpicker().trigger("change");
+                        } else {
+                            alert(data.msg);
+                        }
+                    },
+                    error: function (XMLHttpRequest, textStatus, errorThrown) {
+                        alert(errorThrown);
+                    }
+                });
+            } else {
+                loadTables(null);
+            }
+        });
+
+        //PgSQL: schema 变更获取该 schema 下的表
+        $("#schema_name").change(function () {
+            if (currentEngineLabel() === "PgSQL" && $("#schema_name").val()) {
+                loadTables($("#schema_name").val());
+            }
         });
 
         //判断页面显示
         $("#priv_type").change(function () {
+            var isPg = currentEngineLabel() === "PgSQL";
             //库权限
             if ($("#priv_type").val() === '1') {
                 $("#table_div").hide();
                 $("#db_name_div").hide();
+                $("#schema_name_div").hide();
                 $("#db_name_multiple_div").show();
             }
             //表权限
@@ -450,6 +518,16 @@
                 $("#table_div").show();
                 $("#db_name_div").show();
                 $("#db_name_multiple_div").hide();
+                //仅 PgSQL 需要选择 schema
+                if (isPg) {
+                    $("#schema_name_div").show();
+                    //已选库时触发加载 schema 列表
+                    if ($("#db_name").val()) {
+                        $("#db_name").trigger("change");
+                    }
+                } else {
+                    $("#schema_name_div").hide();
+                }
             }
         });
 
@@ -485,6 +563,11 @@
                         return false
                     }
                 } else if (priv_type === '2') {
+                    // PgSQL 表级需先选择 schema
+                    if (currentEngineLabel() === "PgSQL" && !$("#schema_name").val()) {
+                        alert("请选择模式(schema)");
+                        return false
+                    }
                     if (title && group_name && workflow_auditors && instance_name && db_name && table_name && valid_date && limit_num) {
                         return true
                     } else {

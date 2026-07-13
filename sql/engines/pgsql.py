@@ -12,6 +12,8 @@ import psycopg2
 import logging
 import traceback
 import sqlparse
+import sqlglot
+from sqlglot import expressions as sqlglot_exp
 
 from common.config import SysConfig
 from common.utils.timer import FuncTimer
@@ -89,10 +91,13 @@ class PgSQLEngine(EngineBase):
         :param schema_name:
         :return:
         """
-        schema_name = kwargs.get("schema_name")
-        sql = f"""SELECT table_name
-        FROM information_schema.tables
-        where table_schema =%(schema_name)s;"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT c.relname AS table_name
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = %(schema_name)s
+        AND c.relkind IN ('r', 'p')
+        ORDER BY c.relname;"""
         result = self.query(
             db_name=db_name, sql=sql, parameters={"schema_name": schema_name}
         )
@@ -155,6 +160,528 @@ class PgSQLEngine(EngineBase):
         )
         return result
 
+    def get_table_index_data(self, db_name, tb_name, **kwargs):
+        """
+        获取表格索引信息
+        :param db_name:
+        :param tb_name:
+        :param schema_name:
+        :return:
+        """
+        schema_name = kwargs.get("schema_name")
+        sql = """SELECT
+        index_cls.relname AS index_name,
+        COALESCE(string_agg(attr.attname, ',' ORDER BY cols.ordinality), '') AS column_names,
+        pg_get_indexdef(index_info.indexrelid) AS index_definition
+        FROM pg_class table_cls
+        JOIN pg_namespace namespace ON namespace.oid = table_cls.relnamespace
+        JOIN pg_index index_info ON table_cls.oid = index_info.indrelid
+        JOIN pg_class index_cls ON index_cls.oid = index_info.indexrelid
+        LEFT JOIN LATERAL unnest(index_info.indkey) WITH ORDINALITY AS cols(attnum, ordinality)
+        ON TRUE
+        LEFT JOIN pg_attribute attr
+        ON attr.attrelid = table_cls.oid
+        AND attr.attnum = cols.attnum
+        WHERE namespace.nspname = %(schema_name)s
+        AND table_cls.relname = %(tb_name)s
+        GROUP BY index_cls.relname, index_info.indexrelid
+        ORDER BY index_cls.relname;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "tb_name": tb_name},
+        )
+        return result
+
+    def get_table_overview_data(self, db_name, tb_name, **kwargs):
+        """获取表概要、注释和分区角色"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        c.relname AS table_name,
+        CASE c.relkind
+            WHEN 'p' THEN 'partitioned table'
+            WHEN 'r' THEN 'table'
+            WHEN 'm' THEN 'materialized view'
+            ELSE c.relkind::text
+        END AS object_type,
+        pg_get_userbyid(c.relowner) AS owner,
+        COALESCE(obj_description(c.oid, 'pg_class'), '') AS comment,
+        COALESCE(pg_size_pretty(pg_total_relation_size(c.oid)), '') AS total_size,
+        CASE WHEN c.relispartition THEN 'partition child' ELSE '' END AS partition_role
+        FROM pg_class c
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE n.nspname = %(schema_name)s
+        AND c.relname = %(tb_name)s
+        AND c.relkind IN ('r', 'p', 'm');"""
+        return self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "tb_name": tb_name},
+        )
+
+    def get_table_constraint_data(self, db_name, tb_name, **kwargs):
+        """获取表约束信息"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        con.conname AS constraint_name,
+        CASE con.contype
+            WHEN 'p' THEN 'PRIMARY KEY'
+            WHEN 'u' THEN 'UNIQUE'
+            WHEN 'f' THEN 'FOREIGN KEY'
+            WHEN 'c' THEN 'CHECK'
+            WHEN 'x' THEN 'EXCLUDE'
+            ELSE con.contype::text
+        END AS constraint_type,
+        COALESCE(pg_get_constraintdef(con.oid, true), '') AS constraint_definition
+        FROM pg_constraint con
+        JOIN pg_class cls ON cls.oid = con.conrelid
+        JOIN pg_namespace n ON n.oid = cls.relnamespace
+        WHERE n.nspname = %(schema_name)s
+        AND cls.relname = %(tb_name)s
+        ORDER BY con.contype, con.conname;"""
+        return self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "tb_name": tb_name},
+        )
+
+    def get_table_partition_data(self, db_name, tb_name, **kwargs):
+        """获取表分区信息"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """WITH target AS (
+            SELECT c.oid, c.relname, c.relispartition
+            FROM pg_class c
+            JOIN pg_namespace n ON n.oid = c.relnamespace
+            WHERE n.nspname = %(schema_name)s
+            AND c.relname = %(tb_name)s
+        )
+        SELECT
+        'parent' AS relation_role,
+        parent.relname AS relation_name,
+        COALESCE(pg_get_expr(target_class.relpartbound, target_class.oid), '') AS partition_definition
+        FROM target
+        JOIN pg_class target_class ON target_class.oid = target.oid
+        JOIN pg_inherits inh ON inh.inhrelid = target.oid
+        JOIN pg_class parent ON parent.oid = inh.inhparent
+        UNION ALL
+        SELECT
+        'child' AS relation_role,
+        child.relname AS relation_name,
+        COALESCE(pg_get_expr(child.relpartbound, child.oid), '') AS partition_definition
+        FROM target
+        JOIN pg_inherits inh ON inh.inhparent = target.oid
+        JOIN pg_class child ON child.oid = inh.inhrelid
+        ORDER BY relation_role, relation_name;"""
+        return self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "tb_name": tb_name},
+        )
+
+    def get_materialized_views_list(self, db_name, **kwargs):
+        """获取物化视图列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        matviewname AS object_name,
+        'materialized view' AS object_type
+        FROM pg_matviews
+        WHERE schemaname = %(schema_name)s
+        ORDER BY matviewname;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_materialized_view_detail(self, db_name, matview_name, **kwargs):
+        """获取物化视图详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        schemaname AS schema_name,
+        matviewname AS matview_name,
+        matviewowner AS owner,
+        tablespace,
+        hasindexes,
+        ispopulated,
+        definition,
+        'CREATE MATERIALIZED VIEW ' || quote_ident(schemaname) || '.' ||
+            quote_ident(matviewname) || ' AS ' || definition || E'\\n;' AS create_sql
+        FROM pg_matviews
+        WHERE schemaname = %(schema_name)s
+        AND matviewname = %(matview_name)s;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "matview_name": matview_name},
+        )
+        return {
+            "meta_data": {"column_list": result.column_list, "rows": result.rows},
+            "create_sql": [[row[-1]] for row in result.rows if row[-1]],
+        }
+
+    def get_sequences_list(self, db_name, **kwargs):
+        """获取序列列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        sequence_name,
+        data_type || ' start ' || start_value || ' increment ' || increment
+        FROM information_schema.sequences
+        WHERE sequence_schema = %(schema_name)s
+        ORDER BY sequence_name;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_sequence_detail(self, db_name, sequence_name, **kwargs):
+        """获取序列详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        sequence_schema,
+        sequence_name,
+        data_type,
+        start_value,
+        minimum_value,
+        maximum_value,
+        increment,
+        cycle_option,
+        'CREATE SEQUENCE ' || quote_ident(sequence_schema) || '.' ||
+            quote_ident(sequence_name) ||
+            ' START WITH ' || start_value ||
+            ' INCREMENT BY ' || increment ||
+            ' MINVALUE ' || minimum_value ||
+            ' MAXVALUE ' || maximum_value ||
+            CASE WHEN cycle_option = 'YES' THEN ' CYCLE' ELSE ' NO CYCLE' END ||
+            E';' AS create_sql
+        FROM information_schema.sequences
+        WHERE sequence_schema = %(schema_name)s
+        AND sequence_name = %(sequence_name)s;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "sequence_name": sequence_name},
+        )
+        return {
+            "meta_data": {"column_list": result.column_list, "rows": result.rows},
+            "create_sql": [[row[-1]] for row in result.rows if row[-1]],
+        }
+
+    def get_blocking_chain(self, db_name, **kwargs):
+        """获取锁等待和阻塞链信息"""
+        sql = """WITH waiting AS (
+            SELECT
+                wait_activity.pid AS waiting_pid,
+                blocker_pid AS blocking_pid,
+                wait_activity.usename AS waiting_user,
+                block_activity.usename AS blocking_user,
+                now() - wait_activity.query_start AS waiting_duration,
+                wait_activity.wait_event_type,
+                wait_activity.wait_event,
+                wait_activity.state AS waiting_state,
+                block_activity.state AS blocking_state,
+                wait_activity.query AS waiting_query,
+                block_activity.query AS blocking_query
+            FROM pg_stat_activity wait_activity
+            JOIN LATERAL unnest(pg_blocking_pids(wait_activity.pid)) AS blocker_pid ON true
+            LEFT JOIN pg_stat_activity block_activity ON block_activity.pid = blocker_pid
+            WHERE cardinality(pg_blocking_pids(wait_activity.pid)) > 0
+        )
+        SELECT
+            waiting.waiting_pid,
+            waiting.blocking_pid,
+            waiting.waiting_user,
+            waiting.blocking_user,
+            waiting.waiting_duration::text AS waiting_duration,
+            waiting.wait_event_type,
+            waiting.wait_event,
+            COALESCE(lock_info.locktype, '') AS lock_type,
+            COALESCE(lock_info.relation::regclass::text, '') AS relation_name,
+            waiting.waiting_state,
+            waiting.blocking_state,
+            waiting.waiting_query,
+            waiting.blocking_query,
+            'SELECT pg_cancel_backend(' || waiting.blocking_pid || ');' AS cancel_sql,
+            'SELECT pg_terminate_backend(' || waiting.blocking_pid || ');' AS terminate_sql
+        FROM waiting
+        LEFT JOIN LATERAL (
+            SELECT locktype, relation
+            FROM pg_locks
+            WHERE pid = waiting.waiting_pid
+            AND NOT granted
+            ORDER BY relation NULLS LAST
+            LIMIT 1
+        ) lock_info ON true
+        ORDER BY waiting.waiting_duration DESC, waiting.waiting_pid;"""
+        return self.query(db_name=db_name, sql=sql)
+
+    @staticmethod
+    def _group_program_objects(rows):
+        data = {}
+        for row in rows:
+            obj_name = row[0]
+            if not obj_name:
+                continue
+            initial = obj_name[0]
+            if initial not in data:
+                data[initial] = []
+            data[initial].append(row)
+        return data
+
+    def get_views_list(self, db_name, **kwargs):
+        """获取视图列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT table_name, 'VIEW'
+        FROM information_schema.views
+        WHERE table_schema = %(schema_name)s
+        ORDER BY table_name;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_view_detail(self, db_name, view_name, **kwargs):
+        """获取视图详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        viewname AS view_name,
+        schemaname AS schema_name,
+        viewowner AS view_owner,
+        definition AS view_definition,
+        'CREATE OR REPLACE VIEW ' || quote_ident(schemaname) || '.' ||
+            quote_ident(viewname) || ' AS ' || definition || E'\\n;' AS create_sql
+        FROM pg_views
+        WHERE schemaname = %(schema_name)s
+        AND viewname = %(view_name)s;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "view_name": view_name},
+        )
+        desc = self.describe_table(
+            db_name=db_name, schema_name=schema_name, tb_name=view_name
+        )
+        create_sql = result.rows[0][4] if result.rows else ""
+        view_definition = result.rows[0][3] if result.rows else ""
+        return {
+            "meta_data": {
+                "column_list": result.column_list,
+                "rows": result.rows[0] if result.rows else [],
+            },
+            "desc": {"column_list": desc.column_list, "rows": desc.rows},
+            "view_definition": view_definition,
+            "create_sql": [[create_sql]] if create_sql else [],
+        }
+
+    def get_functions_list(self, db_name, **kwargs):
+        """获取函数列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        p.proname || '(' || COALESCE(pg_get_function_identity_arguments(p.oid), '') || ')' AS display_name,
+        'returns ' || COALESCE(pg_get_function_result(p.oid), '') AS return_type,
+        p.oid::text AS object_id,
+        p.proname AS object_name,
+        COALESCE(pg_get_function_identity_arguments(p.oid), '') AS identity_arguments
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'f'
+        ORDER BY p.proname, pg_get_function_identity_arguments(p.oid);"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_function_detail(self, db_name, func_name, **kwargs):
+        """获取函数详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        object_id = kwargs.get("object_id")
+        sql = """SELECT
+        p.oid::text AS object_id,
+        p.proname AS routine_name,
+        n.nspname AS routine_schema,
+        pg_get_function_result(p.oid) AS return_type,
+        pg_get_function_arguments(p.oid) AS arguments,
+        pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+        l.lanname AS language,
+        pg_get_userbyid(p.proowner) AS owner,
+        pg_get_functiondef(p.oid) AS create_sql
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_language l ON l.oid = p.prolang
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'f'
+        AND p.proname = %(func_name)s
+        ORDER BY p.proname, pg_get_function_arguments(p.oid);"""
+        parameters = {"schema_name": schema_name, "func_name": func_name}
+        if object_id:
+            sql = """SELECT
+        p.oid::text AS object_id,
+        p.proname AS routine_name,
+        n.nspname AS routine_schema,
+        pg_get_function_result(p.oid) AS return_type,
+        pg_get_function_arguments(p.oid) AS arguments,
+        pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+        l.lanname AS language,
+        pg_get_userbyid(p.proowner) AS owner,
+        pg_get_functiondef(p.oid) AS create_sql
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_language l ON l.oid = p.prolang
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'f'
+        AND p.oid = %(object_id)s::oid;"""
+            parameters = {"schema_name": schema_name, "object_id": object_id}
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters=parameters,
+        )
+        return {
+            "meta_data": {"column_list": result.column_list, "rows": result.rows},
+            "create_sql": [[row[-1]] for row in result.rows if row[-1]],
+        }
+
+    def get_procedures_list(self, db_name, **kwargs):
+        """获取存储过程列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        p.proname || '(' || COALESCE(pg_get_function_identity_arguments(p.oid), '') || ')' AS display_name,
+        'procedure' AS routine_type,
+        p.oid::text AS object_id,
+        p.proname AS object_name,
+        COALESCE(pg_get_function_identity_arguments(p.oid), '') AS identity_arguments
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'p'
+        ORDER BY p.proname, pg_get_function_identity_arguments(p.oid);"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_procedure_detail(self, db_name, proc_name, **kwargs):
+        """获取存储过程详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        object_id = kwargs.get("object_id")
+        sql = """SELECT
+        p.oid::text AS object_id,
+        p.proname AS routine_name,
+        n.nspname AS routine_schema,
+        pg_get_function_arguments(p.oid) AS arguments,
+        pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+        l.lanname AS language,
+        pg_get_userbyid(p.proowner) AS owner,
+        pg_get_functiondef(p.oid) AS create_sql
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_language l ON l.oid = p.prolang
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'p'
+        AND p.proname = %(proc_name)s
+        ORDER BY p.proname, pg_get_function_arguments(p.oid);"""
+        parameters = {"schema_name": schema_name, "proc_name": proc_name}
+        if object_id:
+            sql = """SELECT
+        p.oid::text AS object_id,
+        p.proname AS routine_name,
+        n.nspname AS routine_schema,
+        pg_get_function_arguments(p.oid) AS arguments,
+        pg_get_function_identity_arguments(p.oid) AS identity_arguments,
+        l.lanname AS language,
+        pg_get_userbyid(p.proowner) AS owner,
+        pg_get_functiondef(p.oid) AS create_sql
+        FROM pg_proc p
+        JOIN pg_namespace n ON n.oid = p.pronamespace
+        JOIN pg_language l ON l.oid = p.prolang
+        WHERE n.nspname = %(schema_name)s
+        AND p.prokind = 'p'
+        AND p.oid = %(object_id)s::oid;"""
+            parameters = {"schema_name": schema_name, "object_id": object_id}
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters=parameters,
+        )
+        return {
+            "meta_data": {"column_list": result.column_list, "rows": result.rows},
+            "create_sql": [[row[-1]] for row in result.rows if row[-1]],
+        }
+
+    def get_triggers_list(self, db_name, **kwargs):
+        """获取触发器列表，按首字符分组"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        trigger_name,
+        action_timing || ' ' || event_manipulation || ' ON ' || event_object_table
+        FROM information_schema.triggers
+        WHERE trigger_schema = %(schema_name)s
+        ORDER BY trigger_name;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name},
+        )
+        return self._group_program_objects(result.rows)
+
+    def get_trigger_detail(self, db_name, trigger_name, **kwargs):
+        """获取触发器详情"""
+        schema_name = kwargs.get("schema_name") or "public"
+        sql = """SELECT
+        t.tgname AS trigger_name,
+        n.nspname AS trigger_schema,
+        c.relname AS event_object_table,
+        CASE t.tgenabled
+            WHEN 'O' THEN 'enabled'
+            WHEN 'D' THEN 'disabled'
+            WHEN 'R' THEN 'replica'
+            WHEN 'A' THEN 'always'
+            ELSE t.tgenabled::text
+        END AS trigger_status,
+        pg_get_triggerdef(t.oid, true) AS create_sql
+        FROM pg_trigger t
+        JOIN pg_class c ON c.oid = t.tgrelid
+        JOIN pg_namespace n ON n.oid = c.relnamespace
+        WHERE NOT t.tgisinternal
+        AND n.nspname = %(schema_name)s
+        AND t.tgname = %(trigger_name)s
+        ORDER BY c.relname, t.tgname;"""
+        result = self.query(
+            db_name=db_name,
+            schema_name=schema_name,
+            sql=sql,
+            parameters={"schema_name": schema_name, "trigger_name": trigger_name},
+        )
+        return {
+            "column_list": result.column_list,
+            "rows": result.rows[0] if result.rows else [],
+            "create_sql": [[row[-1]] for row in result.rows if row[-1]],
+        }
+
     def query_check(self, db_name=None, sql=""):
         # 查询语句的检查、注释去除、切分
         result = {"msg": "", "bad_query": False, "filtered_sql": sql, "has_star": False}
@@ -173,6 +700,48 @@ class PgSQLEngine(EngineBase):
             result["has_star"] = True
             result["msg"] += "SQL语句中含有 * "
         return result
+
+    # PostgreSQL 系统 schema, 表级鉴权时无需校验
+    SYSTEM_SCHEMAS = frozenset(["pg_catalog", "information_schema"])
+
+    def get_table_ref(self, sql, db_name=None, schema_name=None):
+        """
+        解析 SQL, 提取语句涉及的表引用, 用于查询权限的表级校验。
+        返回与 GoInceptionEngine.get_table_ref 一致的结构:
+        [{"schema": <schema>, "name": <table>}, ...]
+        - 不带 schema 的表引用, 使用传入的 schema_name 补全, 缺省为 public
+        - 排除 CTE (with 子句) 定义的临时表名
+        - 跳过 pg_catalog / information_schema 等系统 schema
+        解析失败时抛出异常, 由调用方兜底处理。
+        """
+        default_schema = schema_name or "public"
+        try:
+            tree = sqlglot.parse_one(sql, dialect="postgres")
+        except Exception as e:
+            raise RuntimeError(f"SQL 解析失败: {e}")
+        if tree is None:
+            return []
+        # 收集 CTE 名称, 这些是查询内定义的临时表, 不是真实表
+        cte_names = {cte.alias_or_name for cte in tree.find_all(sqlglot_exp.CTE)}
+        table_ref = []
+        seen = set()
+        for table in tree.find_all(sqlglot_exp.Table):
+            schema = table.db or default_schema
+            name = table.name
+            if not name:
+                continue
+            # 跳过 CTE 引用 (无显式 schema 且名称命中 CTE)
+            if not table.db and name in cte_names:
+                continue
+            # 跳过系统 schema
+            if schema in self.SYSTEM_SCHEMAS:
+                continue
+            key = (schema, name)
+            if key in seen:
+                continue
+            seen.add(key)
+            table_ref.append({"schema": schema, "name": name})
+        return table_ref
 
     def query(
         self,

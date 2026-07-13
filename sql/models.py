@@ -771,7 +771,8 @@ class QueryPrivileges(models.Model):
     user_display = models.CharField("申请人中文名", max_length=50, default="")
     instance = models.ForeignKey(Instance, on_delete=models.CASCADE)
     db_name = models.CharField("数据库", max_length=64, default="")
-    table_name = models.CharField("表", max_length=64, default="")
+    # 表名，pgsql 表级权限以 schema.table 形式存储，故放宽长度
+    table_name = models.CharField("表", max_length=128, default="")
     valid_date = models.DateField("有效时间")
     limit_num = models.IntegerField("行数限制", default=100)
     priv_type = models.IntegerField(
@@ -851,6 +852,85 @@ class QueryLog(models.Model):
         db_table = "query_log"
         verbose_name = "查询日志"
         verbose_name_plural = "查询日志"
+
+
+class SqlQueryKnowledge(models.Model):
+    """
+    SQL查询页用户自定义知识库
+    """
+
+    username = models.CharField("操作人", max_length=30)
+    user_display = models.CharField("操作人中文名", max_length=50, default="")
+    name = models.CharField("名称", max_length=64)
+    scene = models.CharField("场景", max_length=64, default="自定义", blank=True)
+    engines = models.CharField("适用引擎", max_length=255, default="通用")
+    sql = models.TextField("SQL")
+    instance_name = models.CharField("实例名称", max_length=50, default="", blank=True)
+    db_name = models.CharField("数据库名称", max_length=64, default="", blank=True)
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    sys_time = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "sqlquery_knowledge"
+        indexes = [
+            models.Index(fields=["username", "sys_time"]),
+            models.Index(fields=["username", "name"]),
+        ]
+        verbose_name = "SQL查询知识库"
+        verbose_name_plural = "SQL查询知识库"
+
+
+class SqlQueryFavorite(models.Model):
+    """
+    SQL查询页用户收藏语句快照
+    """
+
+    username = models.CharField("操作人", max_length=30)
+    user_display = models.CharField("操作人中文名", max_length=50, default="")
+    alias = models.CharField("语句标识", max_length=64, default="", blank=True)
+    sql = models.TextField("SQL")
+    instance_name = models.CharField("实例名称", max_length=50, default="", blank=True)
+    db_name = models.CharField("数据库名称", max_length=64, default="", blank=True)
+    source_query_log_id = models.IntegerField(
+        "来源查询日志id", blank=True, null=True, db_index=True
+    )
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    sys_time = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "sqlquery_favorite"
+        indexes = [
+            models.Index(fields=["username", "sys_time"]),
+            models.Index(fields=["username", "alias"]),
+            models.Index(fields=["username", "source_query_log_id"]),
+        ]
+        verbose_name = "SQL查询收藏"
+        verbose_name_plural = "SQL查询收藏"
+
+
+class SqlQueryPreference(models.Model):
+    """
+    SQL查询页用户界面偏好
+    """
+
+    username = models.CharField("操作人", max_length=30, unique=True)
+    user_display = models.CharField("操作人中文名", max_length=50, default="")
+    theme = models.CharField("界面主题", max_length=20, default="archery")
+    resource_tab = models.CharField("资源面板", max_length=20, default="table")
+    mysql_tab = models.CharField("我的SQL面板", max_length=20, default="knowledge")
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    sys_time = models.DateTimeField("更新时间", auto_now=True)
+
+    class Meta:
+        managed = True
+        db_table = "sqlquery_preference"
+        indexes = [
+            models.Index(fields=["sys_time"]),
+        ]
+        verbose_name = "SQL查询界面偏好"
+        verbose_name_plural = "SQL查询界面偏好"
 
 
 rule_type_choices = (
@@ -1111,6 +1191,118 @@ class ArchiveLog(models.Model):
         verbose_name_plural = "归档日志表"
 
 
+PGSQL_MIGRATION_TASK_STATUS_CHOICES = (
+    ("draft", "草稿"),
+    ("checking", "检查中"),
+    ("sequence_previewed", "已预览序列"),
+    ("sequence_applied", "已设置序列"),
+    ("data_checked", "已完成数据检查"),
+    ("failed", "失败"),
+)
+
+
+class PgSQLMigrationTask(models.Model):
+    """PostgreSQL手动迁移准备任务"""
+
+    name = models.CharField("任务名称", max_length=100)
+    source_instance = models.ForeignKey(
+        Instance,
+        verbose_name="源实例",
+        related_name="pgsql_migration_source_tasks",
+        on_delete=models.CASCADE,
+    )
+    target_instance = models.ForeignKey(
+        Instance,
+        verbose_name="目标实例",
+        related_name="pgsql_migration_target_tasks",
+        on_delete=models.CASCADE,
+    )
+    schemas_json = models.TextField("Schema范围", blank=True, default="")
+    tables_json = models.TextField("表范围", blank=True, default="")
+    status = models.CharField(
+        "任务状态",
+        max_length=32,
+        choices=PGSQL_MIGRATION_TASK_STATUS_CHOICES,
+        default="draft",
+    )
+    description = models.TextField("备注", blank=True, default="")
+    user_name = models.CharField("创建人", max_length=30, blank=True, default="")
+    user_display = models.CharField("创建人显示名", max_length=50, blank=True, default="")
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+    update_time = models.DateTimeField("更新时间", auto_now=True)
+
+    def __str__(self):
+        return self.name
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_migration_task"
+        verbose_name = "PgSQL迁移准备任务"
+        verbose_name_plural = "PgSQL迁移准备任务"
+
+
+class PgSQLMigrationTaskLog(models.Model):
+    """PostgreSQL迁移准备任务操作日志"""
+
+    task = models.ForeignKey(PgSQLMigrationTask, on_delete=models.CASCADE)
+    operation = models.CharField("操作", max_length=64)
+    status = models.CharField("状态", max_length=32)
+    message = models.TextField("消息", blank=True, default="")
+    details_json = models.TextField("详情", blank=True, default="")
+    start_time = models.DateTimeField("开始时间", auto_now_add=True)
+    finish_time = models.DateTimeField("结束时间", blank=True, null=True)
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_migration_task_log"
+        verbose_name = "PgSQL迁移任务日志"
+        verbose_name_plural = "PgSQL迁移任务日志"
+
+
+class PgSQLMigrationSequenceResult(models.Model):
+    """PostgreSQL迁移序列预览和设置结果"""
+
+    task = models.ForeignKey(PgSQLMigrationTask, on_delete=models.CASCADE)
+    operation = models.CharField("操作", max_length=20)
+    sequence_schema = models.CharField("序列Schema", max_length=64)
+    sequence_name = models.CharField("序列名", max_length=128)
+    table_schema = models.CharField("表Schema", max_length=64, blank=True, default="")
+    table_name = models.CharField("表名", max_length=128, blank=True, default="")
+    column_name = models.CharField("字段名", max_length=128, blank=True, default="")
+    source_last_value = models.BigIntegerField("源库当前值", blank=True, null=True)
+    target_current_value = models.BigIntegerField("目标库当前值", blank=True, null=True)
+    target_value = models.BigIntegerField("目标设置值", blank=True, null=True)
+    should_apply = models.BooleanField("是否应设置", default=False)
+    reason = models.CharField("原因", max_length=255, blank=True, default="")
+    setval_sql = models.TextField("setval SQL", blank=True, default="")
+    status = models.CharField("执行状态", max_length=32, blank=True, default="")
+    error = models.TextField("错误", blank=True, default="")
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_migration_sequence_result"
+        verbose_name = "PgSQL迁移序列结果"
+        verbose_name_plural = "PgSQL迁移序列结果"
+
+
+class PgSQLMigrationDataCheckResult(models.Model):
+    """PostgreSQL迁移数据检查结果"""
+
+    task = models.ForeignKey(PgSQLMigrationTask, on_delete=models.CASCADE)
+    schema_name = models.CharField("Schema", max_length=64)
+    table_name = models.CharField("表名", max_length=128)
+    status = models.CharField("检查状态", max_length=20)
+    checks_json = models.TextField("检查详情")
+    create_time = models.DateTimeField("创建时间", auto_now_add=True)
+
+    class Meta:
+        managed = True
+        db_table = "pgsql_migration_data_check_result"
+        verbose_name = "PgSQL迁移数据检查结果"
+        verbose_name_plural = "PgSQL迁移数据检查结果"
+
+
 class Config(models.Model):
     """
     配置信息表
@@ -1214,6 +1406,9 @@ class Permission(models.Model):
             ("menu_data_dictionary", "菜单 数据字典"),
             ("menu_tools", "菜单 工具插件"),
             ("menu_archive", "菜单 数据归档"),
+            ("menu_pgsql_migration", "菜单 PgSQL迁移助手"),
+            ("pgsql_migration_mgt", "管理PgSQL迁移准备任务"),
+            ("pgsql_migration_execute", "执行PgSQL迁移检查和设置"),
             ("menu_my2sql", "菜单 My2SQL"),
             ("menu_schemasync", "菜单 SchemaSync"),
             ("menu_system", "菜单 系统管理"),

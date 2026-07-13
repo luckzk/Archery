@@ -426,6 +426,42 @@ class TestPgSQL(TestCase):
         self.assertEqual(new_engine.name, "PgSQL")
         self.assertEqual(new_engine.info, "PgSQL engine")
 
+    def test_get_table_ref_with_schema_and_default(self):
+        """带 schema 的表用其 schema, 不带 schema 的表用传入的 schema_name 补全"""
+        new_engine = PgSQLEngine(instance=self.ins)
+        table_ref = new_engine.get_table_ref(
+            "select * from s1.t1 join t2 on t1.id = t2.id",
+            db_name="archery",
+            schema_name="public",
+        )
+        self.assertIn({"schema": "s1", "name": "t1"}, table_ref)
+        self.assertIn({"schema": "public", "name": "t2"}, table_ref)
+        self.assertEqual(len(table_ref), 2)
+
+    def test_get_table_ref_excludes_cte(self):
+        """CTE (with 子句) 定义的临时表名不应被当作真实表"""
+        new_engine = PgSQLEngine(instance=self.ins)
+        table_ref = new_engine.get_table_ref(
+            "with c as (select * from public.orders) "
+            "select * from c join s2.items i on 1=1",
+            db_name="archery",
+            schema_name="public",
+        )
+        names = [t["name"] for t in table_ref]
+        self.assertNotIn("c", names)
+        self.assertIn({"schema": "public", "name": "orders"}, table_ref)
+        self.assertIn({"schema": "s2", "name": "items"}, table_ref)
+
+    def test_get_table_ref_skips_system_schema(self):
+        """pg_catalog / information_schema 系统 schema 应被跳过"""
+        new_engine = PgSQLEngine(instance=self.ins)
+        table_ref = new_engine.get_table_ref(
+            "select * from pg_catalog.pg_stat_activity",
+            db_name="archery",
+            schema_name="public",
+        )
+        self.assertEqual(table_ref, [])
+
     @patch("psycopg2.connect")
     def test_get_connection(self, _conn):
         new_engine = PgSQLEngine(instance=self.ins)
@@ -755,6 +791,73 @@ class TestPgSQL(TestCase):
         self.assertEqual(
             safe_sql, "WITH RECURSIVE x AS (SELECT 1 AS id) SELECT id FROM x"
         )
+
+    def test_dbdiagnostic_validate_select_sql_rejects_empty_and_multiple(self):
+        ok, message, safe_sql = DBDiagnosticSQLTemplate.validate_select_sql("")
+
+        self.assertFalse(ok)
+        self.assertEqual(message, "SQL不能为空")
+        self.assertEqual(safe_sql, "")
+
+        ok, message, safe_sql = DBDiagnosticSQLTemplate.validate_select_sql(
+            "SELECT 1; SELECT 2;"
+        )
+
+        self.assertFalse(ok)
+        self.assertEqual(message, "只允许单条SELECT语句")
+        self.assertEqual(safe_sql, "")
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_dbdiagnostic_sql_rejects_invalid_template_at_runtime(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_processlist",
+            template_name="invalid runtime sql",
+            sql="SELECT 1; SELECT 2;",
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.processlist(command_type="All")
+
+        self.assertEqual(result.error, "只允许单条SELECT语句")
+        mock_query.assert_not_called()
+
+    @patch("sql.engines.pgsql.PgSQLEngine.query")
+    def test_dbdiagnostic_sql_ignores_disabled_templates(self, mock_query):
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_processlist",
+            template_name="enabled template",
+            sql=(
+                "SELECT 1 AS pid, 'postgres' AS datname, 'u' AS usename, "
+                "'active' AS state, 'enabled' AS query"
+            ),
+            timeout_ms=1111,
+        )
+        DBDiagnosticSQLTemplate.objects.create(
+            db_type="pgsql",
+            diagnostic_type="pgsql_processlist",
+            template_name="disabled template",
+            sql=(
+                "SELECT 2 AS pid, 'postgres' AS datname, 'u' AS usename, "
+                "'active' AS state, 'disabled' AS query"
+            ),
+            timeout_ms=2222,
+            enabled=False,
+        )
+        mock_query.return_value = ResultSet(
+            column_list=["pid", "datname", "usename", "state", "query"],
+            rows=[(1, "postgres", "u", "active", "enabled")],
+        )
+
+        new_engine = PgSQLEngine(instance=self.ins)
+        result = new_engine.processlist(command_type="All")
+
+        self.assertIsNone(result.error)
+        call_kwargs = mock_query.call_args.kwargs
+        self.assertEqual(call_kwargs["max_execution_time"], 1111)
+        self.assertIn("enabled", call_kwargs["sql"])
+        self.assertNotIn("disabled", call_kwargs["sql"])
 
     @patch("sql.engines.pgsql.PgSQLEngine.query")
     def test_processlist_uses_custom_template_and_not_idle_replacement(self, mock_query):

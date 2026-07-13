@@ -1,8 +1,21 @@
 {% extends "base.html" %}
+{% load static %}
 
 {% block content %}
+    <link rel="stylesheet" href="{% static 'sqlquery/sqlquery-aliyun.css' %}">
+
+    <div id="sqlquery-theme-root" class="sqlquery-theme-root"
+         data-sqlquery-theme="{{ sqlquery_preference.theme }}"
+         data-sqlquery-resource-tab="{{ sqlquery_preference.resource_tab }}"
+         data-sqlquery-mysql-tab="{{ sqlquery_preference.mysql_tab }}">
+    <div class="sqlquery-theme-switch" role="group" aria-label="SQL 查询界面切换">
+        <span>界面</span>
+        <button type="button" class="btn btn-default btn-xs" data-sqlquery-theme="archery">Archery</button>
+        <button type="button" class="btn btn-primary btn-xs" data-sqlquery-theme="aliyun">Aliyun</button>
+    </div>
+    <div class="sqlquery-original-view">
     <!-- 自定义操作按钮-->
-    <div id="query-log-toolbar" class="form-inline pull-left">
+    <div id="query-log-toolbar" class="form-inline pull-left" data-original-parent="query-log-toolbar">
         <div class="form-group">
             <select id="filter-star" class="form-control selectpicker"
                     title="全部">
@@ -17,22 +30,32 @@
                     title="全部">
                 <option value="" selected="selected">全部</option>
                 {% for sql in favorites %}
-                    <option value={{ sql.id }}>{{ sql.alias }}</option>
+                    {% if sql.source_query_log_id %}
+                        <option value="{{ sql.source_query_log_id }}">{{ sql.alias }}</option>
+                    {% endif %}
                 {% endfor %}
             </select>
         </div>
     </div>
     <!-- 收藏信息弹出框-->
     <div class="modal fade" id="favorite">
-        <div class="modal-dialog modal-sm">
+        <div class="modal-dialog">
             <div class="modal-content message_align">
                 <div class="modal-header">
                     <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
                             aria-hidden="true">×</span></button>
                     <h4 class="modal-title text-danger">收藏语句</h4>
                 </div>
-                <div class="modal-body">
-                    <input type="hidden" id="query_log_id">
+                    <div class="modal-body">
+                        <input type="hidden" id="query_log_id">
+                        <input type="hidden" id="favorite_id">
+                        <div id="favorite-modal-alert" class="alert alert-warning" style="display:none;margin-bottom:10px;"></div>
+                    <div class="form-group">
+                        <label>收藏SQL</label>
+                        <textarea id="favorite_sql_content" class="form-control" rows="8"
+                                  style="font-family: Menlo, Monaco, Consolas, 'Courier New', monospace;"
+                                  placeholder="请输入要收藏的SQL"></textarea>
+                    </div>
                     <input id="alias" name="alias" type='text' autocomplete="off" class="form-control"
                            placeholder="请输入语句别名"/>
                 </div>
@@ -48,16 +71,22 @@
             <div class="panel panel-default">
                 <div class="panel-heading form-inline">
                     SQL查询
-                    <select id="favorites" name="favorites"
-                            class="form-control selectpicker"
-                            data-live-search="true" data-live-search-placeholder="搜索"
-                            title="常用查询"
-                            required>
-                        {% for sql in favorites %}
-                            <option value={{ sql.id }}>{{ sql.alias }}</option>
-                        {% endfor %}
-                    </select>
-                    <div class="form-group ">
+                    <span id="favorites-wrapper">
+                        <select id="favorites" name="favorites"
+                                class="form-control selectpicker"
+                                data-live-search="true" data-live-search-placeholder="搜索"
+                                title="常用查询"
+                                required>
+                            {% for sql in favorites %}
+                                <option value="{{ sql.id }}"
+                                        data-source-query-log-id="{{ sql.source_query_log_id|default:'' }}"
+                                        data-sql="{{ sql.sqllog|escape }}"
+                                        data-instance-name="{{ sql.instance_name|default:'' }}"
+                                        data-db-name="{{ sql.db_name|default:'' }}">{{ sql.alias }}</option>
+                            {% endfor %}
+                        </select>
+                    </span>
+                    <div id="div-exportsubmit" class="form-group ">
                         {% if storage_type %}
                             {% if can_offline_download == 1 %}
                                 <button id="btn-exportsubmit" type="button" class="btn btn-default">
@@ -89,7 +118,7 @@
                                 <ul id="table-locator-results" class="list-unstyled"
                                     style="max-height:160px;overflow-y:auto;margin-top:4px;"></ul>
                             </div>
-                            <div class="form-group">
+                            <div id="div-instance_name" class="form-group">
                                 <select id="instance_name" name="instance_name"
                                         class="selectpicker show-tick form-control bs-select-hidden"
                                         data-live-search="true" data-live-search-placeholder="搜索您所在组的实例"
@@ -100,7 +129,7 @@
                                 {% endfor %}
                                 </select>
                             </div>
-                            <div class="form-group">
+                            <div id="div-db_name" class="form-group">
                                 <select id="db_name" name="db_name"
                                         class="form-control selectpicker show-tick bs-select-hidden"
                                         data-live-search="true" data-live-search-placeholder="搜索您要查询的数据库"
@@ -125,7 +154,7 @@
                                         data-placeholder="查看表结构:" required>
                                 </select>
                             </div>
-                            <div class="form-group">
+                            <div id="div-limit_num" class="form-group">
                                 <select id="limit_num" name="limit_num"
                                         class="form-control selectpicker show-tick bs-select-hidden"
                                         data-placeholder="返回行数:" required>
@@ -136,7 +165,7 @@
                                     <option value=0>max(最大限制行数)</option>
                                 </select>
                             </div>
-                            <div class="form-group">
+                            <div id="div-query-actions" class="form-group">
                                 <input id="btn-format" type="button" class="btn btn-info" value="美化"/>
                                 <input id="btn-explain" type="button" class="btn btn-warning" value="执行计划"/>
                                 <input id="btn-sqlquery" type="button" class="btn btn-success" value="SQL查询"/>
@@ -266,6 +295,326 @@
             </div>
         </div>
     </div>
+    </div>
+    <div id="sqlquery-aliyun-console" class="sqlquery-aliyun-console" aria-label="Aliyun SQL Console">
+        <div class="aliyun-topbar" role="region" aria-label="SQL 查询上下文">
+            <span class="aliyun-env-tag">生产</span>
+            <div class="aliyun-select-group">
+                <span id="aliyun-engine-tag" class="aliyun-engine-tag"></span>
+                <div id="aliyun-instance-slot" class="aliyun-topbar-slot instance-slot"></div>
+            </div>
+            <div class="aliyun-select-group">
+                <div id="aliyun-db-slot" class="aliyun-topbar-slot database-slot"></div>
+            </div>
+            <div id="aliyun-schema-group" class="aliyun-select-group aliyun-schema-group">
+                <div id="aliyun-schema-slot" class="aliyun-topbar-slot"></div>
+            </div>
+            <div class="aliyun-topbar-actions">
+                <span class="aliyun-permissions">我的权限：查询 | 变更 | 性能查看</span>
+                <span class="aliyun-icon-tools" aria-hidden="true">
+                    <i class="fa fa-info-circle" title="实例信息"></i>
+                    <i class="fa fa-table" title="表"></i>
+                    <i class="fa fa-sitemap" title="ER"></i>
+                    <i class="fa fa-line-chart" title="性能"></i>
+                    <i class="fa fa-refresh" title="刷新"></i>
+                    <i class="fa fa-list-alt" title="任务"></i>
+                    <i class="fa fa-external-link" title="新窗口"></i>
+                    <i class="fa fa-paper-plane-o" title="发送"></i>
+                    <i class="fa fa-arrows-alt" title="全屏"></i>
+                    <i class="fa fa-shield" title="安全"></i>
+                </span>
+            </div>
+        </div>
+        <div class="aliyun-main">
+            <div class="aliyun-editor-area">
+                <div class="aliyun-console-tabs" role="tablist" aria-label="SQL Console 标签">
+                    <span class="aliyun-console-tab" role="tab" aria-selected="true">SQLConsole</span>
+                    <span class="aliyun-console-add" aria-hidden="true"><i class="fa fa-plus"></i></span>
+                    <span class="aliyun-console-menu" aria-hidden="true"><i class="fa fa-bars"></i></span>
+                </div>
+                <div class="aliyun-toolbar">
+                    <div id="aliyun-query-actions-slot"></div>
+                    <div id="aliyun-ai-slot"></div>
+                    <span id="aliyun-toolbar-extra" class="aliyun-toolbar-extra">
+                        <label class="aliyun-pg-analyze-option" id="aliyun-pg-analyze-wrap" title="勾选后 EXPLAIN 会真实执行 SQL">
+                            <input type="checkbox" id="aliyun-pg-explain-analyze"> ANALYZE
+                        </label>
+                        <button type="button" class="btn btn-default btn-sm" id="aliyun-pg-locks" title="查看PgSQL锁等待和阻塞链">锁诊断</button>
+                        <button type="button" class="btn btn-default btn-sm" disabled title="SQL诊断暂未接入 Aliyun 主题">SQL诊断</button>
+                        <button type="button" class="btn btn-default btn-sm" disabled title="设置暂未接入 Aliyun 主题">设置</button>
+                        <i class="fa fa-keyboard-o" title="快捷键" aria-hidden="true"></i>
+                        <i class="fa fa-expand" title="编辑器全屏" aria-hidden="true"></i>
+                    </span>
+                </div>
+                <div id="aliyun-editor-slot" class="aliyun-editor-slot"></div>
+                <div class="aliyun-mysql-panel">
+                    <div class="aliyun-workbench-tabs">
+                        <button type="button" class="aliyun-workbench-tab active" data-aliyun-workbench-tab="mysql">SQL资产</button>
+                        <button type="button" class="aliyun-workbench-tab aliyun-result-home-tab" data-aliyun-workbench-tab="results">执行结果</button>
+                        <span id="aliyun-result-tabs" class="aliyun-result-tabs" role="tablist" aria-label="执行结果"></span>
+                        <span class="aliyun-mysql-actions" aria-hidden="true">
+                            <i class="fa fa-bars" title="更多"></i>
+                            <i class="fa fa-expand" title="展开"></i>
+                        </span>
+                    </div>
+                    <div id="aliyun-workbench-mysql" class="aliyun-workbench-pane active">
+                        <div class="aliyun-mysql-tabs">
+                            <button type="button" class="aliyun-mysql-tab active" data-aliyun-mysql-tab="knowledge">知识库</button>
+                            <button type="button" class="aliyun-mysql-tab" data-aliyun-mysql-tab="favorite">收藏</button>
+                            <button type="button" class="aliyun-mysql-tab" data-aliyun-mysql-tab="history">执行历史</button>
+                        </div>
+                        <div id="aliyun-mysql-knowledge" class="aliyun-mysql-pane active">
+                            <div class="aliyun-knowledge-toolbar">
+                                <button type="button" class="aliyun-favorite-add" id="aliyun-knowledge-add">
+                                    <i class="fa fa-plus"></i>添加
+                                </button>
+                                <select id="aliyun-knowledge-engine-filter" class="form-control selectpicker"
+                                        title="全部引擎">
+                                    <option value="">全部引擎</option>
+                                    {% for engine in knowledge_engines %}
+                                        <option value="{{ engine }}">{{ engine }}</option>
+                                    {% endfor %}
+                                </select>
+                                <select id="aliyun-knowledge-scene-filter" class="form-control selectpicker"
+                                        title="全部场景">
+                                    <option value="">全部场景</option>
+                                </select>
+                                <div class="aliyun-favorite-search">
+                                    <input id="aliyun-knowledge-search-input" type="text" placeholder="搜索知识库SQL">
+                                    <i class="fa fa-search"></i>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                            <table class="table table-condensed aliyun-knowledge-table">
+                                <thead>
+                                <tr>
+                                    <th style="width: 14%">名称</th>
+                                    <th>SQL（双击SQL粘贴至上方）</th>
+                                    <th style="width: 10%">引擎</th>
+                                    <th style="width: 10%">场景</th>
+                                    <th style="width: 10%">操作</th>
+                                </tr>
+                                </thead>
+                                <tbody>
+                                <tr class="aliyun-knowledge-row" data-engines="MySQL,PgSQL,Oracle,MsSQL,ClickHouse,Doris,TDengine" data-sql="select * from table_name limit 100;">
+                                    <td>快速查询</td>
+                                    <td class="sql-text">select * from table_name limit 100;</td>
+                                    <td>通用</td>
+                                    <td>查询</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-row" data-engines="MySQL,PgSQL,Oracle,MsSQL" data-sql="select count(*) from table_name;">
+                                    <td>行数统计</td>
+                                    <td class="sql-text">select count(*) from table_name;</td>
+                                    <td>通用</td>
+                                    <td>统计</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-row" data-engines="MySQL" data-sql="show index from table_name;">
+                                    <td>查看索引</td>
+                                    <td class="sql-text">show index from table_name;</td>
+                                    <td>MySQL</td>
+                                    <td>结构</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-row" data-engines="PgSQL" data-sql="select schemaname, tablename, indexname, indexdef from pg_indexes where tablename = 'table_name';">
+                                    <td>查看索引</td>
+                                    <td class="sql-text">select schemaname, tablename, indexname, indexdef from pg_indexes where tablename = 'table_name';</td>
+                                    <td>PgSQL</td>
+                                    <td>结构</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-row" data-engines="MySQL" data-sql="show full processlist;">
+                                    <td>会话列表</td>
+                                    <td class="sql-text">show full processlist;</td>
+                                    <td>MySQL</td>
+                                    <td>诊断</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-row" data-engines="PgSQL" data-sql="select pid, usename, state, wait_event_type, wait_event, query from pg_stat_activity where state <> 'idle';">
+                                    <td>活动会话</td>
+                                    <td class="sql-text">select pid, usename, state, wait_event_type, wait_event, query from pg_stat_activity where state &lt;&gt; 'idle';</td>
+                                    <td>PgSQL</td>
+                                    <td>诊断</td>
+                                    <td><button type="button" class="btn btn-xs btn-default aliyun-knowledge-fill">填充</button></td>
+                                </tr>
+                                <tr class="aliyun-knowledge-empty" style="display: none;">
+                                    <td class="aliyun-empty-row" colspan="5">没有匹配当前实例类型的模板</td>
+                                </tr>
+                                </tbody>
+                            </table>
+                            </div>
+                        </div>
+                        <div id="aliyun-mysql-favorite" class="aliyun-mysql-pane">
+                            <div class="aliyun-favorite-toolbar">
+                                <button type="button" class="aliyun-favorite-add" id="aliyun-favorite-add">
+                                    <i class="fa fa-plus"></i>添加
+                                </button>
+                                <div class="aliyun-favorite-search">
+                                    <input id="aliyun-favorite-search-input" type="text" placeholder="支持关键字/语义/模糊搜索">
+                                    <i class="fa fa-search"></i>
+                                </div>
+                            </div>
+                            <div class="table-responsive">
+                                <table id="aliyun-favorite-table" class="table table-condensed aliyun-favorite-table">
+                                    <thead>
+                                    <tr>
+                                        <th style="width: 13%" data-favorite-sort="alias">注释 <i class="fa fa-sort"></i></th>
+                                        <th data-favorite-sort="sqllog">SQL（双击SQL粘贴至上方） <i class="fa fa-sort"></i></th>
+                                        <th style="width: 14%" data-favorite-sort="create_time">添加时间 <i class="fa fa-sort"></i></th>
+                                        <th style="width: 14%" data-favorite-sort="sys_time">最后使用时间 <i class="fa fa-sort"></i></th>
+                                        <th style="width: 13%">操作</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody>
+                                    {% for sql in favorites %}
+                                        <tr class="aliyun-favorite-row" data-favorite-id="{{ sql.id }}"
+                                            data-source-query-log-id="{{ sql.source_query_log_id|default:'' }}"
+                                            data-instance-name="{{ sql.instance_name|default:'' }}"
+                                            data-db-name="{{ sql.db_name|default:'' }}">
+                                            <td class="aliyun-favorite-alias" title="{{ sql.alias|default:'未命名' }}">{{ sql.alias|default:"未命名" }}</td>
+                                            <td class="sql-text" title="{{ sql.sqllog|escape }}">{{ sql.sqllog }}</td>
+                                            <td>{{ sql.create_time|date:"Y-m-d H:i:s" }}</td>
+                                            <td>{{ sql.sys_time|date:"Y-m-d H:i:s" }}</td>
+                                            <td>
+                                                <button type="button" class="btn btn-xs btn-default aliyun-favorite-fill">回填</button>
+                                                <button type="button" class="btn btn-xs btn-default aliyun-favorite-edit">编辑</button>
+                                                <button type="button" class="btn btn-xs btn-default aliyun-favorite-delete">删除</button>
+                                            </td>
+                                            <td class="aliyun-favorite-sql-source">{{ sql.sqllog }}</td>
+                                        </tr>
+                                    {% empty %}
+                                        <tr class="aliyun-favorite-empty">
+                                            <td class="aliyun-empty-row" colspan="5">没有数据</td>
+                                        </tr>
+                                    {% endfor %}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                        <div id="aliyun-mysql-history" class="aliyun-mysql-pane aliyun-history-pane"></div>
+                    </div>
+                    <div id="aliyun-workbench-results-empty" class="aliyun-workbench-pane aliyun-result-empty-pane">
+                        <div class="aliyun-result-empty-state">
+                            <strong>暂无执行结果</strong>
+                            <span>执行 SQL 后，结果会在这里以独立标签展示。</span>
+                        </div>
+                    </div>
+                    <div id="aliyun-result-panes"></div>
+                </div>
+            </div>
+            <div class="aliyun-resource-panel">
+                <div class="aliyun-resource-tabs" role="tablist" aria-label="资源类型">
+                    <button type="button" class="aliyun-resource-tab active" data-aliyun-resource-tab="table" role="tab" aria-selected="true" aria-controls="aliyun-resource-table">表</button>
+                    <button type="button" class="aliyun-resource-tab" data-aliyun-resource-tab="program" role="tab" aria-selected="false" aria-controls="aliyun-resource-program">可编程对象</button>
+                </div>
+                <div id="aliyun-resource-table" class="aliyun-resource-pane active" role="tabpanel">
+                    <div class="aliyun-resource-tools">
+                        <div class="aliyun-resource-search">
+                            <i class="fa fa-search" aria-hidden="true"></i>
+                            <input id="aliyun-table-tree-search" type="text" placeholder="请输入表名称搜索">
+                        </div>
+                        <button type="button" id="aliyun-resource-refresh" class="aliyun-resource-icon-btn" title="刷新表资源" aria-label="刷新表资源"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+                        <button type="button" class="aliyun-resource-icon-btn" title="更多" aria-label="更多表资源操作" disabled><i class="fa fa-bars" aria-hidden="true"></i></button>
+                    </div>
+                    <p class="text-muted aliyun-resource-helper">搜索不到需要的表？试试点击右侧刷新按钮。</p>
+                    <div id="aliyun-table-locator-slot" class="table-locator-slot aliyun-hidden-tool-slot"></div>
+                    <div id="aliyun-table-select-slot" class="aliyun-hidden-tool-slot"></div>
+                    <ul id="aliyun-table-object-list" class="aliyun-object-tree"></ul>
+                    <div id="aliyun-limit-slot" class="aliyun-limit-slot"></div>
+                </div>
+                <div id="aliyun-resource-program" class="aliyun-resource-pane" role="tabpanel">
+                    <div class="aliyun-resource-tools">
+                        <div class="aliyun-resource-search">
+                            <i class="fa fa-search" aria-hidden="true"></i>
+                            <input id="aliyun-program-tree-search" type="text" placeholder="请输入对象名称搜索">
+                        </div>
+                        <button type="button" id="aliyun-program-resource-refresh" class="aliyun-resource-icon-btn" title="刷新可编程对象" aria-label="刷新可编程对象"><i class="fa fa-refresh" aria-hidden="true"></i></button>
+                    </div>
+                    <ul id="aliyun-program-object-list" class="aliyun-object-tree aliyun-program-tree">
+                        <li class="aliyun-program-group" data-program-type="view">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-eye"></i><span class="aliyun-tree-label">视图</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                        <li class="aliyun-program-group" data-program-type="materialized_view">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-database"></i><span class="aliyun-tree-label">物化视图</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                        <li class="aliyun-program-group" data-program-type="sequence">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-sort-numeric-asc"></i><span class="aliyun-tree-label">序列</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                        <li class="aliyun-program-group" data-program-type="function">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-code"></i><span class="aliyun-tree-label">函数</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                        <li class="aliyun-program-group" data-program-type="procedure">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-cogs"></i><span class="aliyun-tree-label">存储过程</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                        <li class="aliyun-program-group" data-program-type="trigger">
+                            <div class="aliyun-tree-row"><span class="aliyun-tree-toggle">+</span><i class="fa fa-bolt"></i><span class="aliyun-tree-label">触发器</span></div>
+                            <ul class="aliyun-tree-children"></ul>
+                        </li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+        <div class="modal fade aliyun-console-modal" id="aliyun-knowledge-modal">
+            <div class="modal-dialog">
+                <div class="modal-content message_align">
+                    <div class="modal-header">
+                        <button type="button" class="close" data-dismiss="modal" aria-label="Close"><span
+                                aria-hidden="true">×</span></button>
+                        <h4 class="modal-title">添加知识库SQL</h4>
+                    </div>
+                    <div class="modal-body">
+                        <input id="aliyun-knowledge-id" type="hidden">
+                        <input id="aliyun-knowledge-action" type="hidden" value="add">
+                        <div id="aliyun-knowledge-alert" class="alert alert-warning" style="display:none;margin-bottom:10px;"></div>
+                        <div class="form-group">
+                            <label>名称</label>
+                            <input id="aliyun-knowledge-name" type="text" autocomplete="off" class="form-control"
+                                   placeholder="请输入名称">
+                        </div>
+                        <div class="form-group">
+                            <label>场景</label>
+                            <input id="aliyun-knowledge-scene" type="text" autocomplete="off" class="form-control"
+                                   placeholder="例如：查询 / 统计 / 诊断">
+                        </div>
+                        <div class="form-group">
+                            <label>适用引擎</label>
+                            <select id="aliyun-knowledge-engines" class="form-control selectpicker" multiple
+                                    title="请选择引擎">
+                                {% for engine in knowledge_engines %}
+                                    <option value="{{ engine }}">{{ engine }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>SQL</label>
+                            <textarea id="aliyun-knowledge-sql" class="form-control" rows="8"
+                                      placeholder="请输入要加入知识库的SQL"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-info aliyun-modal-cancel" data-dismiss="modal">取消</button>
+                        <button type="button" id="aliyun-knowledge-save" class="btn btn-primary">保存</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div id="aliyun-confirm" class="aliyun-confirm" style="display:none" role="dialog" aria-modal="true" aria-labelledby="aliyun-confirm-message">
+            <div class="aliyun-confirm-box">
+                <div class="aliyun-confirm-message" id="aliyun-confirm-message"></div>
+                <div class="aliyun-confirm-actions">
+                    <button type="button" class="btn btn-default btn-sm aliyun-confirm-cancel">取消</button>
+                    <button type="button" class="btn btn-primary btn-sm aliyun-confirm-ok">确认</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    </div>
 {% endblock content %}
 
 {% block js %}
@@ -280,6 +629,33 @@
     <script src="{% static 'bootstrap-table/export-libs/js-xlsx/xlsx.core.min.js' %}"></script>
     <script src="{% static 'bootstrap-table/js/bootstrap-table-export.min.js' %}"></script>
     <script src="{% static 'bootstrap-table/js/tableExport.min.js' %}"></script>
+
+    <script src="{% static 'sqlquery/sqlquery-aliyun-core.js' %}"></script>
+    <script src="{% static 'sqlquery/sqlquery-aliyun-favorites.js' %}"></script>
+    <script src="{% static 'sqlquery/sqlquery-aliyun-results.js' %}"></script>
+    <script src="{% static 'sqlquery/sqlquery-aliyun-knowledge.js' %}"></script>
+    <script src="{% static 'sqlquery/sqlquery-aliyun-resources.js' %}"></script>
+    <script src="{% static 'sqlquery/sqlquery-aliyun-init.js' %}"></script>
+
+    <script>
+        function showSqlqueryPageNotice(message, type) {
+            if (typeof showAliyunNotice === 'function') {
+                showAliyunNotice(message, type);
+                return;
+            }
+            var notice = $('#sqlquery-page-notice');
+            if (!notice.length) {
+                notice = $('<div/>', {id: 'sqlquery-page-notice', class: 'sqlquery-page-notice'}).appendTo('body');
+            }
+            notice.removeClass('is-error is-success')
+                .addClass(type === 'error' ? 'is-error' : 'is-success')
+                .text(message || '')
+                .stop(true, true)
+                .fadeIn(120)
+                .delay(1800)
+                .fadeOut(180);
+        }
+    </script>
 
     <!-- 查询历史  -->
     <script>
@@ -427,43 +803,72 @@
 
         // 快捷查询
         $("#favorites").change(function () {
-            let query_log_id = $("#favorites").val();
-            $("#filter-alias").val(query_log_id);
-            $('#filter-alias').selectpicker('render');
-            $('#filter-alias').selectpicker('refresh');
-            get_querylog(query_log_id);
+            let option = $("#favorites option:selected");
+            let source_query_log_id = option.data('source-query-log-id');
+            let sql = option.data('sql');
+            if (sql) {
+                editor.setValue(sql);
+                editor.clearSelection();
+            }
+            if (source_query_log_id) {
+                $("#filter-alias").val(source_query_log_id);
+                $('#filter-alias').selectpicker('render');
+                $('#filter-alias').selectpicker('refresh');
+            }
         });
 
         // 收藏
         function star(query_log_id) {
             if (query_log_id) {
                 $("#query_log_id").val(query_log_id);
+                $("#favorite_id").val('');
+                $("#favorite_sql_content").val('');
+                $("#favorite-modal-alert").hide().text('');
+                $("#alias").val('');
+                let row_data = $('#sql-log').bootstrapTable('getRowByUniqueId', query_log_id);
+                let sql_preview = row_data && row_data['sqllog'] ? row_data['sqllog'] : '';
+                $("#favorite_sql_content").val(sql_preview);
             } else if ($("#alias").val()) {
+                if (!$("#favorite_sql_content").val()) {
+                    $("#favorite-modal-alert").text('SQL内容不能为空！').show();
+                    return;
+                }
+                $("#favorite-modal-alert").hide().text('');
                 $.ajax({
                     type: "post",
                     url: "/query/favorite/",
                     dataType: "json",
-                    data: {
+	            data: {
+                        favorite_id: $("#favorite_id").val(),
                         query_log_id: $("#query_log_id").val(),
                         star: true,
                         alias: $("#alias").val(),
+                        sql_content: $("#favorite_sql_content").val(),
+                        instance_name: $("#instance_name").val(),
+                        db_name: $("#db_name").val(),
                     },
                     complete: function () {
                         $("#sql-log").bootstrapTable('refresh');
                         $("#favorite").modal('hide');
                         $("#alias").val('')
+                        $("#favorite_id").val('')
+                        $("#query_log_id").val('')
+                        $("#favorite_sql_content").val('')
+                        if (typeof refreshAliyunFavoriteState === 'function') {
+                            refreshAliyunFavoriteState(false);
+                        }
                     },
                     success: function (data) {
                         if (data.status !== 0) {
-                            alert(data.msg);
+                            $("#favorite-modal-alert").text(data.msg).show();
                         }
                     },
                     error: function (XMLHttpRequest, textStatus, errorThrown) {
-                        alert(errorThrown);
+                        $("#favorite-modal-alert").text(errorThrown).show();
                     }
                 });
             } else {
-                alert('请输入语句别名！')
+                $("#favorite-modal-alert").text('请输入语句别名！').show();
             }
         }
 
@@ -480,14 +885,17 @@
                 },
                 complete: function () {
                     $("#sql-log").bootstrapTable('refresh');
+                    if (typeof refreshAliyunFavoriteState === 'function') {
+                        refreshAliyunFavoriteState(false);
+                    }
                 },
                 success: function (data) {
                     if (data.status !== 0) {
-                        alert(data.msg);
+                        showSqlqueryPageNotice(data.msg, 'error');
                     }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         }
@@ -516,7 +924,7 @@
                 $('input[type=button]').prop('disabled', true);
                 sqlquery()
             } else {
-                alert("信息不完整，无法一键查询！")
+                showSqlqueryPageNotice('信息不完整，无法一键查询！', 'error')
             }
             sessionStorage.removeItem('re_query');
         }
@@ -538,7 +946,7 @@
                     }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         }
@@ -630,7 +1038,6 @@
             var active_li_id = sessionStorage.getItem('active_li_id');
 
             if (active_li_id === 'sqllog_tab') {
-                //alert("查询历史tab不允许删除")
             }
             //非查询历史时，删除当前激活的tab
             else if (active_li_id.match(/^execute_result_tab*/)) {
@@ -659,13 +1066,13 @@
                 sqlContent = select_sqlContent
             }
             if (!instance_name) {
-                alert("请选择实例！");
+                showSqlqueryPageNotice('请选择实例！', 'error');
                 return result = false;
             } else if (!db_name) {
-                alert("请选择数据库！");
+                showSqlqueryPageNotice('请选择数据库！', 'error');
                 return result = false;
             } else if (!sqlContent) {
-                alert("SQL内容不能为空！");
+                showSqlqueryPageNotice('SQL内容不能为空！', 'error');
                 return result = false;
             }
             return result;
@@ -681,13 +1088,13 @@
                 var query_desc = $("#generateDesc").val()
 
                 if (!instance_name) {
-                    alert("请选择实例！")
+                    showSqlqueryPageNotice('请选择实例！', 'error')
                 } else if (!db_name) {
-                    alert("请选择数据库！")
+                    showSqlqueryPageNotice('请选择数据库！', 'error')
                 } else if (optgroup !== 'Redis' && !tb_name){
-                    alert("请选择表结构！")
+                    showSqlqueryPageNotice('请选择表结构！', 'error')
                 } else if (!query_desc) {
-                    alert("请输入查询描述！")
+                    showSqlqueryPageNotice('请输入查询描述！', 'error')
                 } else {
                     check = true
                 }
@@ -723,12 +1130,22 @@
         
         //先做表单验证，验证成功再成功提交执行计划查看
         $("#btn-explain").click(function () {
-                if (sqlquery_validate()) {
+                if (!sqlquery_validate()) {
+                    return;
+                }
+                var optgroup = $('#instance_name :selected').parent().attr('label');
+                var useAnalyze = optgroup === "PgSQL" && $('#aliyun-pg-explain-analyze').is(':checked');
+                var runExplain = function () {
                     const inputButton = $('input[type=button]')
                     inputButton.addClass('disabled');
                     inputButton.prop("disabled", true)
                     sqlquery('explain')
+                };
+                if (useAnalyze) {
+                    showAliyunConfirm('EXPLAIN ANALYZE 会真实执行当前 SQL，确认继续？', runExplain);
+                    return;
                 }
+                runExplain();
             }
         );
 
@@ -816,8 +1233,8 @@
                         need_describe_display = true
                     }
                 }
-                // 执行结果页默认不新增
-                else if (active_li_title.match(/^执行结果\d$/)) {
+                // Aliyun 主题下每次执行都新增执行结果页；Archery 原版保留当前结果页复用逻辑。
+                else if (!isAliyunSqlqueryTheme() && active_li_title.match(/^执行结果\d$/)) {
                     n = active_li_id.split("execute_result_tab")[1];
                 } else {
                     tab_add();
@@ -906,12 +1323,14 @@
                             showExport: showExport,
                             exportDataType: "all",
                             exportTypes: ['json', 'sql', 'csv', 'txt', 'xml', 'xlsx'],
-                            exportOptions: {
-                                //ignoreColumn: [0],  //忽略某些列的索引数组
-                                fileName: function () {
-                                var userInput = prompt('请输入文件名：');  // 弹出对话框让用户输入文件名
-                                return userInput || 'export_result';  // 若用户未输入文件名，则使用默认文件名
-                                },
+	                            exportOptions: {
+	                                //ignoreColumn: [0],  //忽略某些列的索引数组
+	                                fileName: function () {
+	                                    if (typeof getAliyunResultExportName === 'function') {
+	                                        return getAliyunResultExportName(n);
+	                                    }
+	                                    return 'export_result';
+	                                },
                                 onFileSave: function (e) {
                                     var url = e.currentTarget.href;
                                     var xhr = new XMLHttpRequest();
@@ -1007,6 +1426,7 @@
                     //执行时间和脱敏时间赋值
                     $("#" + ('time') + n).text(result['query_time'] + ' sec');
                     $("#" + ('masking_time') + n).text(result['mask_time'] + ' sec');
+                    syncAliyunResultPane(result, n, true);
                     //主从延迟赋值，仅在出现延迟时展示，null和0都不展示
                     if (result['seconds_behind_master']) {
                         $("#seconds_behind_master").text('Seconds_Behind_Master:  ' + result['seconds_behind_master']);
@@ -1015,7 +1435,7 @@
 
             } else {
                 //查询报错失败信息
-                if (active_li_title.match(/^执行结果\d$/)) {
+                if (!isAliyunSqlqueryTheme() && active_li_title.match(/^执行结果\d$/)) {
                     n = active_li_id.split("execute_result_tab")[1];
                 } else {
                     tab_add();
@@ -1039,6 +1459,7 @@
                         error: data.msg
                     }]
                 })
+                syncAliyunResultPane({rows: [], query_time: '-', mask_time: '-'}, n, false);
             }
         }
 
@@ -1064,7 +1485,16 @@
             } else if (optgroup === "MySQL" || optgroup === "PgSQL" ) {
                 //查看执行计划
                 if (sql === 'explain') {
-                    sqlContent = 'explain ' + sqlContent
+                    if (optgroup === "PgSQL") {
+                        if (!sqlContent.match(/^\s*explain\b/i)) {
+                            var explainOptions = $('#aliyun-pg-explain-analyze').is(':checked') ?
+                                'FORMAT JSON, COSTS, VERBOSE, ANALYZE, BUFFERS, WAL' :
+                                'FORMAT JSON, COSTS, VERBOSE';
+                            sqlContent = 'EXPLAIN (' + explainOptions + ') ' + sqlContent
+                        }
+                    } else {
+                        sqlContent = 'explain ' + sqlContent
+                    }
                 }
                 //查看表结构
                 else if (sql === 'show create table') {
@@ -1119,7 +1549,7 @@
                     display_data(data, target);
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         }
@@ -1150,7 +1580,7 @@
                     editor.clearSelection();
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         }
@@ -1226,11 +1656,16 @@
                 } else {
                     $("#mongo-hint-info").hide();
                 }
+                syncAliyunSchemaGroup();
             }
         }
 
         //实例变更获取数据库
         $("#instance_name").change(function () {
+            syncAliyunEngineTag();
+            if (typeof syncAliyunKnowledgeRows === 'function') {
+                syncAliyunKnowledgeRows();
+            }
             if (sessionStorage.getItem('re_query')) {
                 get_instance(false)
             } else {
@@ -1280,12 +1715,12 @@
                         //自动补全提示
                         setCompleteData(dbs)
                     } else {
-                        alert(data.msg);
+                        showSqlqueryPageNotice(data.msg, 'error');
                     }
                 },
 
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         }
@@ -1295,6 +1730,9 @@
             $("#table_name").empty();
             $('#table_name').selectpicker('render');
             $('#table_name').selectpicker('refresh');
+            if (typeof resetAliyunProgramObjects === 'function') {
+                resetAliyunProgramObjects();
+            }
             $("#schema_name").empty();
             $('#schema_name').selectpicker('render');
             $('#schema_name').selectpicker('refresh');
@@ -1318,11 +1756,9 @@
                     if (optgroup === "PgSQL") {
                         //获取schema
                         $("#div-schema_name").show();
-                        $("#schema_name").selectpicker('val', db_name);
-                        if ($("#schema_name").val()) {
-                            $("#schema_name").selectpicker().trigger("change");
-                        }
+                        syncAliyunSchemaGroup();
                     }
+                    syncAliyunSchemaGroup();
                 },
                 success: function (data) {
                     if (data.status === 0) {
@@ -1344,6 +1780,9 @@
                             //自动补全提示
                             $("#schema_name").val('');
                             setTablesCompleteData(result)
+                            if (typeof syncAliyunTableObjects === 'function') {
+                                syncAliyunTableObjects();
+                            }
                         } else {
                             for (var i = 0; i < result.length; i++) {
                                 var name = "<option>" + result[i] + "</option>";
@@ -1353,14 +1792,19 @@
                             $('#schema_name').selectpicker('refresh');
                             //自动补全提示
                             setSchemasCompleteData(result)
+                            var schemaName = result.indexOf('public') !== -1 ? 'public' : result[0];
+                            if (schemaName) {
+                                $("#schema_name").selectpicker('val', schemaName);
+                                $("#schema_name").selectpicker().trigger("change");
+                            }
                         }
 
                     } else {
-                        alert(data.msg);
+                        showSqlqueryPageNotice(data.msg, 'error');
                     }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         });
@@ -1370,6 +1814,9 @@
             $("#table_name").empty();
             $('#table_name').selectpicker('render');
             $('#table_name').selectpicker('refresh');
+            if (typeof resetAliyunProgramObjects === 'function') {
+                resetAliyunProgramObjects();
+            }
             //获取table
             $.ajax({
                 type: "get",
@@ -1395,12 +1842,15 @@
                         $('#table_name').selectpicker('refresh');
                         //自动补全提示
                         setTablesCompleteData(result)
+                        if (typeof syncAliyunTableObjects === 'function') {
+                            syncAliyunTableObjects();
+                        }
                     } else {
-                        alert(data.msg);
+                        showSqlqueryPageNotice(data.msg, 'error');
                     }
                 },
                 error: function (XMLHttpRequest, textStatus, errorThrown) {
-                    alert(errorThrown);
+                    showSqlqueryPageNotice(errorThrown, 'error');
                 }
             });
         });
@@ -1505,11 +1955,11 @@
                             $('#instance_name').selectpicker('render').selectpicker('refresh');
                             $("#db_name").empty().selectpicker('render').selectpicker('refresh');
                         } else {
-                            alert(data.msg);
+                            showSqlqueryPageNotice(data.msg, 'error');
                         }
                     },
                     error: function (XMLHttpRequest, textStatus, errorThrown) {
-                        alert(errorThrown);
+                        showSqlqueryPageNotice(errorThrown, 'error');
                     }
                 });
             });
@@ -1688,4 +2138,3 @@
         });
     </script>
 {% endblock %}
-

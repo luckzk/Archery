@@ -171,7 +171,7 @@ function get_pgsql_vacuum_list() {
             cardView: false,
             detailView: false,
             locale: 'zh-CN',
-            toolbar: "#toolbar",
+            toolbar: "#pgsql-vacuum-toolbar",
             queryParamsType: 'limit',
             queryParams: function (params) {
                 return {
