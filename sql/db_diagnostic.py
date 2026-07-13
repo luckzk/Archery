@@ -161,6 +161,8 @@ def tablespace(request):
     limit = int(request.POST.get("limit", 14))
     db_name = request.POST.get("db_name", "")
     schema_name = request.POST.get("schema_name", "")
+    # 表格搜索关键词，pgsql 按 schema/表名过滤，mysql 按库名过滤
+    schema_search = request.POST.get("schema_search", "")
     try:
         instance = user_instances(request.user).get(instance_name=instance_name)
     except Instance.DoesNotExist:
@@ -171,10 +173,14 @@ def tablespace(request):
     try:
         if instance.db_type == "pgsql":
             query_result = query_engine.tablespace(
-                offset, limit, db_name=db_name, schema_name=schema_name
+                offset,
+                limit,
+                db_name=db_name,
+                schema_name=schema_name,
+                schema_search=schema_search,
             )
         else:
-            query_result = query_engine.tablespace(offset, limit)
+            query_result = query_engine.tablespace(offset, limit, schema_search=schema_search)
     except AttributeError:
         result = {
             "status": 1,
@@ -188,10 +194,12 @@ def tablespace(request):
             table_space = query_result.to_dict()
             if instance.db_type == "pgsql":
                 r = query_engine.tablespace_count(
-                    db_name=db_name, schema_name=schema_name
+                    db_name=db_name,
+                    schema_name=schema_name,
+                    schema_search=schema_search,
                 )
             else:
-                r = query_engine.tablespace_count()
+                r = query_engine.tablespace_count(schema_search=schema_search)
             if r.error:
                 result = {"status": 1, "msg": r.error}
                 return HttpResponse(json.dumps(result), content_type="application/json")

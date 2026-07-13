@@ -2170,6 +2170,11 @@ WITH relation_sizes AS (
       AND namespace.nspname NOT IN ('pg_catalog', 'information_schema')
       AND namespace.nspname NOT LIKE 'pg_toast%%'
       AND ($schema_name$ = '' OR namespace.nspname = $schema_name$)
+      AND (
+          $schema_search$ = ''
+          OR relation.relname ILIKE $schema_search$
+          OR namespace.nspname ILIKE $schema_search$
+      )
 )
 SELECT
     schema_name,
@@ -2202,12 +2207,28 @@ ORDER BY total_size_bytes DESC, schema_name, table_name
             return False, "Schema名称只允许字母、数字、下划线、点、美元符号和短横线"
         return True, "'{}'".format(schema_name.replace("'", "''"))
 
-    def tablespace(self, offset=0, row_count=14, db_name="", schema_name=""):
+    def _schema_search_literal(self, schema_search):
+        """构造表空间搜索关键词的安全 SQL 字面量('' 或 '%%关键词%%')。
+        用于 ILIKE 模糊匹配 schema/表名; 空串时返回 '' 表示不过滤。
+        使用 %% 以兼容 psycopg2 的百分号处理(与模板内 'pg_toast%%' 一致)。"""
+        term = (schema_search or "").strip()
+        if not term:
+            return True, "''"
+        if not re.match(r"^[A-Za-z0-9_.$ -]+$", term):
+            return False, "搜索关键词只允许字母、数字、下划线、点、美元符号、空格和短横线"
+        return True, "'%%{}%%'".format(term.replace("'", "''"))
+
+    def tablespace(self, offset=0, row_count=14, db_name="", schema_name="", schema_search=""):
         """获取 PostgreSQL 表级空间占用"""
         ok, schema_literal = self._schema_name_literal(schema_name)
         if not ok:
             result = ResultSet(full_sql="")
             result.error = schema_literal
+            return result
+        ok, search_literal = self._schema_search_literal(schema_search)
+        if not ok:
+            result = ResultSet(full_sql="")
+            result.error = search_literal
             return result
 
         sql = self._pgsql_tablespace_sql(include_pagination=True)
@@ -2220,6 +2241,7 @@ ORDER BY total_size_bytes DESC, schema_name, table_name
                 "$limit$": str(int(row_count)),
                 "$offset$": str(int(offset)),
                 "$schema_name$": schema_literal,
+                "$schema_search$": search_literal,
             },
             required_columns=[
                 "schema_name",
@@ -2230,12 +2252,17 @@ ORDER BY total_size_bytes DESC, schema_name, table_name
             template_db_name_override=False,
         )
 
-    def tablespace_count(self, db_name="", schema_name=""):
+    def tablespace_count(self, db_name="", schema_name="", schema_search=""):
         """获取 PostgreSQL 表空间记录数"""
         ok, schema_literal = self._schema_name_literal(schema_name)
         if not ok:
             result = ResultSet(full_sql="")
             result.error = schema_literal
+            return result
+        ok, search_literal = self._schema_search_literal(schema_search)
+        if not ok:
+            result = ResultSet(full_sql="")
+            result.error = search_literal
             return result
 
         template = self._get_dbdiagnostic_sql_template("pgsql_tablespace")
@@ -2252,6 +2279,7 @@ ORDER BY total_size_bytes DESC, schema_name, table_name
             sql.replace("$limit$", "9223372036854775807")
             .replace("$offset$", "0")
             .replace("$schema_name$", schema_literal)
+            .replace("$schema_search$", search_literal)
         )
         ok, message, safe_sql = self._validate_dbdiagnostic_sql(sql)
         if not ok:
