@@ -55,6 +55,9 @@
 ### Docker
 参考 https://github.com/hhyo/archery/wiki/docker 
 
+### 生产运行方式记录
+开发阶段的源码生产运行方式记录见 [docs/production-runtime.md](docs/production-runtime.md)，用于后续部署规划；当前本机 debug 运行不等同于生产部署。
+
 手动安装
 ===============
 [部署说明](https://github.com/hhyo/archery/wiki/manual)
@@ -66,6 +69,22 @@ pytest -q
 # 或按模块执行
 pytest -q sql common sql_api
 ```
+
+数据库结构变更
+===============
+当前仓库历史上不提交 `sql/migrations/`，该目录在 `.gitignore` 中被忽略。不要只为单个新增模型补局部 migration；这会改变 Django 对整个 `sql` app 的建表策略，容易影响测试库和部署初始化。
+
+涉及 Archery 元数据库结构或默认数据的变更，优先维护版本化初始化/升级 SQL，例如 `src/init_sql/v1.14.0_pgsql_metrics.sql`。对已有环境执行结构变更或导入 SQL 前，先备份当前元数据库，并在执行后运行 `python manage.py check` 和相关测试。
+
+工具插件
+===============
+Archery 主体内的工具插件由 `sql/tool_plugins.py` 注册，默认启用 `archive,pgsql_migration,my2sql,schemasync`。如需在部署层面关闭某个插件，可以通过环境变量覆盖：
+
+```
+ENABLED_TOOL_PLUGINS=archive,my2sql,schemasync
+```
+
+`PgSQL迁移助手` 当前作为工具插件接入 Archery 主体，菜单入口位于 `工具插件` 下；访问仍受 `menu_pgsql_migration`、`pgsql_migration_mgt`、`pgsql_migration_execute` 等权限控制。
 
 依赖清单
 ===============
@@ -139,4 +158,3 @@ pytest -q sql common sql_api
 - [goInception](https://github.com/hanchuanchuan/goInception) 一个集审核、执行、备份及生成回滚语句于一身的MySQL运维工具
 - [JetBrains Open Source](https://www.jetbrains.com/zh-cn/opensource/?from=archery) 为项目提供免费的 IDE 授权  
   [<img src="https://resources.jetbrains.com/storage/products/company/brand/logos/jb_beam.png" width="200"/>](https://www.jetbrains.com/opensource/)
-

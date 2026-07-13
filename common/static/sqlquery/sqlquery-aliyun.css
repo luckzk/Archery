@@ -1,0 +1,3289 @@
+.sqlquery-theme-root {
+    --aliyun-primary: #1f6feb;
+    --aliyun-primary-hover: #195bbd;
+    --aliyun-primary-soft: #eef5ff;
+    --aliyun-dms-blue: #0070cc;
+    --aliyun-dms-blue-soft: #eaf6ff;
+    --aliyun-dms-cyan: #17b7d7;
+    --aliyun-text: #182230;
+    --aliyun-text-muted: #667085;
+    --aliyun-border: #d0d7de;
+    --aliyun-border-soft: #e4e7ec;
+    --aliyun-surface: #fff;
+    --aliyun-surface-muted: #f6f8fb;
+    --aliyun-success: #137333;
+    --aliyun-danger: #b42318;
+    --aliyun-warning: #b45309;
+    --aliyun-focus: rgba(31, 111, 235, 0.28);
+    --aliyun-shadow: 0 8px 18px rgba(16, 24, 40, 0.10);
+    --aliyun-control-height: 30px;
+    --aliyun-tab-height: 32px;
+    --aliyun-row-height: 34px;
+    --aliyun-icon-button: 28px;
+    --aliyun-radius: 2px;
+}
+
+.sqlquery-theme-root.is-aliyun,
+.sqlquery-theme-root.is-aliyun * {
+    box-sizing: border-box;
+}
+
+.sqlquery-theme-root.is-aliyun button,
+.sqlquery-theme-root.is-aliyun input,
+.sqlquery-theme-root.is-aliyun textarea,
+.sqlquery-theme-root.is-aliyun .btn,
+.sqlquery-theme-root.is-aliyun .dropdown-toggle {
+    transition: border-color 160ms ease, background-color 160ms ease, color 160ms ease, box-shadow 160ms ease, opacity 160ms ease;
+}
+
+.sqlquery-theme-root.is-aliyun button:focus-visible,
+.sqlquery-theme-root.is-aliyun input:focus-visible,
+.sqlquery-theme-root.is-aliyun textarea:focus-visible,
+.sqlquery-theme-root.is-aliyun .btn:focus,
+.sqlquery-theme-root.is-aliyun .dropdown-toggle:focus {
+    outline: 2px solid var(--aliyun-focus);
+    outline-offset: 1px;
+    box-shadow: 0 0 0 2px var(--aliyun-focus);
+}
+
+.sqlquery-theme-root.is-aliyun button:disabled,
+.sqlquery-theme-root.is-aliyun .btn:disabled,
+.sqlquery-theme-root.is-aliyun .btn.disabled,
+.sqlquery-theme-root.is-aliyun input:disabled {
+    cursor: not-allowed;
+    opacity: 0.55;
+}
+
+.sqlquery-theme-switch {
+    position: fixed;
+    top: 64px;
+    right: 18px;
+    z-index: 1040;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 2px;
+    background: rgba(255, 255, 255, 0.96);
+    box-shadow: var(--aliyun-shadow);
+    font-size: 12px;
+}
+
+.sqlquery-theme-switch .btn {
+    height: 26px;
+    padding: 3px 8px;
+    border-radius: 2px;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.sqlquery-theme-root:not(.is-aliyun) .sqlquery-aliyun-console {
+    display: none;
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-original-view > .row.clearfix,
+.sqlquery-theme-root.is-aliyun .sqlquery-original-view > #query-log-toolbar {
+    display: none;
+}
+
+.sqlquery-theme-root.is-aliyun {
+    margin: -10px -15px 0;
+    background: var(--aliyun-surface-muted);
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-theme-switch {
+    top: 58px;
+}
+
+.sqlquery-aliyun-console {
+    min-height: calc(100vh - 58px);
+    color: var(--aliyun-text);
+    background: var(--aliyun-surface);
+    font-size: 12px;
+    line-height: 1.45;
+}
+
+.aliyun-topbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 38px;
+    padding: 6px 148px 6px 10px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+    box-shadow: inset 0 -1px 0 #f2f3f5;
+    font-size: 11px;
+}
+
+.aliyun-engine-tag {
+    flex: 0 0 auto;
+    display: none;
+    padding: 1px 5px;
+    border: 1px solid var(--aliyun-border);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-primary-soft);
+    font-size: 11px;
+    font-weight: 600;
+    line-height: 16px;
+}
+
+.aliyun-select-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    flex: 0 1 auto;
+    min-width: 0;
+}
+
+.aliyun-select-group > span {
+    color: var(--aliyun-text-muted);
+    font-size: 13px;
+    line-height: 24px;
+    white-space: nowrap;
+}
+
+.aliyun-schema-group {
+    display: none;
+}
+
+.aliyun-schema-group.has-schema {
+    display: flex;
+}
+
+.aliyun-topbar-slot {
+    min-width: 130px;
+    max-width: 100%;
+}
+
+.aliyun-topbar-slot.instance-slot {
+    min-width: 330px;
+}
+
+.aliyun-topbar-slot.database-slot {
+    min-width: 190px;
+}
+
+.aliyun-topbar .form-group,
+.aliyun-resource-panel .form-group,
+.aliyun-toolbar .form-group {
+    margin: 0;
+}
+
+.aliyun-topbar .bootstrap-select,
+.aliyun-topbar .form-control,
+.aliyun-resource-panel .bootstrap-select,
+.aliyun-resource-panel .form-control {
+    width: 100% !important;
+}
+
+.aliyun-topbar .btn.dropdown-toggle,
+.aliyun-resource-panel .btn.dropdown-toggle,
+.aliyun-resource-panel .form-control,
+.aliyun-mysql-panel .form-control {
+    height: 28px;
+    min-height: 28px;
+    padding: 2px 7px;
+    border-color: var(--aliyun-border);
+    border-radius: 0;
+    box-shadow: none;
+    font-size: 12px;
+    line-height: 22px;
+}
+
+.aliyun-topbar .bootstrap-select {
+    height: 28px !important;
+    min-height: 28px;
+}
+
+.aliyun-topbar .filter-option,
+.aliyun-resource-panel .filter-option {
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aliyun-topbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-left: auto;
+    white-space: nowrap;
+    min-width: 0;
+}
+
+.aliyun-permissions {
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-icon-tools {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    color: var(--aliyun-primary);
+    font-size: 15px;
+}
+
+.aliyun-icon-tools .fa {
+    cursor: default;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+}
+
+.aliyun-main {
+    display: flex;
+    min-height: calc(100vh - 96px);
+    background: #fff;
+}
+
+.aliyun-editor-area {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    border-right: 1px solid var(--aliyun-border);
+}
+
+.aliyun-console-tabs {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-console-tab {
+    display: inline-flex;
+    align-items: center;
+    height: 34px;
+    padding: 0 20px;
+    border-top: 2px solid var(--aliyun-primary);
+    border-right: 1px solid var(--aliyun-border);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-surface);
+    font-size: 12px;
+}
+
+.aliyun-console-add,
+.aliyun-console-menu {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    color: var(--aliyun-text-muted);
+    font-size: 15px;
+}
+
+.aliyun-console-menu {
+    margin-left: auto;
+    font-size: 16px;
+}
+
+.aliyun-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 6px;
+    min-height: 38px;
+    padding: 4px 8px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-toolbar .btn,
+.aliyun-toolbar input[type=button] {
+    min-height: 30px;
+    padding: 4px 10px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 2px;
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 20px;
+    touch-action: manipulation;
+}
+
+.aliyun-toolbar .btn:hover,
+.aliyun-toolbar input[type=button]:hover,
+.aliyun-favorite-add:hover,
+.aliyun-result-summary .btn:hover,
+.aliyun-resource-icon-btn:hover,
+.aliyun-tree-action:hover {
+    border-color: var(--aliyun-primary);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-toolbar #div-query-actions {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin: 0;
+}
+
+.aliyun-toolbar #btn-sqlquery {
+    order: 1;
+    border-color: var(--aliyun-primary);
+    background: var(--aliyun-primary);
+    color: #fff;
+}
+
+.aliyun-toolbar #btn-sqlquery:hover {
+    border-color: var(--aliyun-primary-hover);
+    background: var(--aliyun-primary-hover);
+    color: #fff;
+}
+
+.aliyun-toolbar #btn-format {
+    order: 2;
+}
+
+.aliyun-toolbar #btn-explain {
+    order: 3;
+}
+
+.aliyun-toolbar #btn-generatesql {
+    border-color: #7c5cff;
+    background: #7c5cff;
+    color: #fff;
+}
+
+.aliyun-toolbar-extra {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: 4px;
+    flex-wrap: wrap;
+    color: var(--aliyun-text-muted);
+}
+
+.aliyun-pg-analyze-option {
+    display: none;
+    align-items: center;
+    gap: 4px;
+    height: 28px;
+    margin: 0;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    font-weight: 400;
+    line-height: 28px;
+}
+
+.aliyun-pg-analyze-option input {
+    margin: 0;
+}
+
+.aliyun-confirm {
+    position: fixed;
+    inset: 0;
+    z-index: 1999;
+    background: rgba(15, 23, 42, 0.38);
+}
+
+.aliyun-confirm-box {
+    position: absolute;
+    top: 26%;
+    left: 50%;
+    width: min(420px, calc(100vw - 32px));
+    padding: 16px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 4px;
+    background: var(--aliyun-surface);
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    transform: translateX(-50%);
+}
+
+.aliyun-confirm-message {
+    color: var(--aliyun-text);
+    font-size: 13px;
+    line-height: 1.5;
+}
+
+.aliyun-confirm-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 8px;
+    margin-top: 16px;
+}
+
+.aliyun-toolbar #aliyun-ai-slot {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+}
+
+.aliyun-toolbar #generateDesc {
+    width: 260px !important;
+    height: 30px;
+    min-height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+    resize: none;
+}
+
+.aliyun-editor-slot {
+    flex: 1 1 auto;
+    min-height: 310px;
+}
+
+.aliyun-editor-slot .ace_editor {
+    width: 100% !important;
+    min-height: 310px !important;
+    border: 0;
+    font-size: 13px;
+}
+
+.aliyun-mysql-panel {
+    min-height: 240px;
+    border-top: 1px dotted #8a8f99;
+    background: #fff;
+}
+
+.aliyun-workbench-tabs {
+    display: flex;
+    align-items: center;
+    min-height: 34px;
+    padding: 0 12px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface);
+    overflow-x: auto;
+}
+
+.aliyun-workbench-tab {
+    position: relative;
+    flex: 0 0 auto;
+    height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-top: 2px solid transparent;
+    border-right: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    line-height: 30px;
+    white-space: nowrap;
+}
+
+.aliyun-result-tab {
+    padding-right: 34px;
+}
+
+.aliyun-result-tab-close {
+    position: absolute;
+    top: 5px;
+    right: 5px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--aliyun-text-muted);
+    font-size: 14px;
+    line-height: 16px;
+}
+
+.aliyun-result-tab-close::before {
+    content: "\00d7";
+}
+
+.aliyun-result-tab-close:hover {
+    color: var(--aliyun-danger);
+    background: #fff1f0;
+}
+
+.aliyun-workbench-tab:first-child {
+    border-left: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-workbench-tab.active {
+    border-top-color: var(--aliyun-primary);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-result-tabs {
+    display: inline-flex;
+    flex: 1 1 auto;
+    align-items: center;
+    min-width: 0;
+}
+
+.aliyun-workbench-pane {
+    display: none;
+    padding: 10px 12px;
+}
+
+.aliyun-workbench-pane.active {
+    display: block;
+}
+
+.aliyun-mysql-actions {
+    display: inline-flex;
+    gap: 12px;
+    margin-left: auto;
+    color: var(--aliyun-text-muted);
+    font-size: 15px;
+}
+
+.aliyun-mysql-tabs {
+    display: flex;
+    align-items: center;
+    gap: 0;
+    margin-bottom: 8px;
+    padding: 0;
+    background: #fff;
+}
+
+.aliyun-mysql-tab {
+    min-height: 32px;
+    padding: 6px 14px;
+    border: 1px solid var(--aliyun-border);
+    border-right: 0;
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aliyun-mysql-tab:last-child {
+    border-right: 1px solid var(--aliyun-border);
+}
+
+.aliyun-mysql-tab.active {
+    border-color: var(--aliyun-primary);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-mysql-pane {
+    display: none;
+    padding: 0;
+}
+
+.aliyun-mysql-pane.active {
+    display: block;
+}
+
+.aliyun-knowledge-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.aliyun-knowledge-toolbar > .bootstrap-select {
+    width: 118px !important;
+}
+
+.aliyun-knowledge-toolbar .btn.dropdown-toggle {
+    height: 30px;
+    padding: 4px 8px;
+    border-color: #d9dde3;
+    border-radius: 0;
+    background: #fff;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.aliyun-knowledge-table {
+    width: 100%;
+    margin-bottom: 0;
+    border: 1px solid var(--aliyun-border-soft);
+    table-layout: fixed;
+}
+
+.aliyun-knowledge-table > thead > tr > th {
+    height: 36px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    font-weight: 500;
+}
+
+.aliyun-empty-row {
+    height: 58px;
+    color: var(--aliyun-text-muted);
+    text-align: center;
+}
+
+.aliyun-history-pane #query-log-toolbar {
+    float: none !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin: 0 0 10px;
+}
+
+.aliyun-history-pane #nav-tabs {
+    margin-bottom: 10px;
+}
+
+.aliyun-history-pane .bootstrap-table .fixed-table-toolbar {
+    margin-bottom: 6px;
+}
+
+.aliyun-history-pane #sql_log_result {
+    display: block !important;
+    opacity: 1;
+    padding: 0;
+}
+
+.aliyun-result-pane .panel {
+    margin-bottom: 0;
+    border-radius: 0;
+    box-shadow: none;
+}
+
+.aliyun-result-pane .panel-heading {
+    display: none;
+}
+
+.aliyun-result-summary {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 10px;
+    margin: 0 0 8px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-result-summary .navbar-text {
+    float: none;
+    margin: 0;
+}
+
+.aliyun-result-summary strong {
+    color: var(--aliyun-text);
+    font-weight: 600;
+}
+
+.aliyun-result-summary .btn {
+    min-height: 28px;
+    padding: 4px 8px;
+    border-color: var(--aliyun-border);
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aliyun-result-tools-hint {
+    color: var(--aliyun-text-muted);
+}
+
+.aliyun-result-search {
+    display: inline-flex;
+    align-items: center;
+    width: 200px;
+    height: 28px;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-result-search .fa {
+    width: 24px;
+    color: var(--aliyun-text-muted);
+    text-align: center;
+}
+
+.aliyun-result-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 26px;
+    border: 0;
+    outline: none;
+    font-size: 12px;
+}
+
+.aliyun-result-export-name {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--aliyun-text-muted);
+}
+
+.aliyun-result-export-name input {
+    width: 150px;
+    height: 28px;
+    padding: 2px 6px;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 18px;
+    outline: none;
+}
+
+.aliyun-result-sql {
+    flex: 1 1 220px;
+    min-width: 160px;
+    overflow: hidden;
+    color: var(--aliyun-text-muted);
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-result-cell-active {
+    outline: 2px solid var(--aliyun-primary);
+    outline-offset: -1px;
+    background: var(--aliyun-primary-soft) !important;
+}
+
+.aliyun-result-pane .fixed-table-toolbar {
+    margin-bottom: 6px;
+}
+
+.aliyun-result-pane .fixed-table-toolbar .search input,
+.aliyun-result-pane .fixed-table-toolbar .btn {
+    height: 30px;
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aliyun-column-settings-panel {
+    display: none;
+    margin: 0 0 8px;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+    box-shadow: var(--aliyun-shadow);
+}
+
+.aliyun-column-settings-panel.is-open {
+    display: block;
+}
+
+.aliyun-column-settings-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 28px;
+    padding: 0 10px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    color: var(--aliyun-text);
+    font-size: 12px;
+}
+
+.aliyun-column-settings-close {
+    border: 0;
+    background: transparent;
+    color: var(--aliyun-text-muted);
+    font-size: 18px;
+    line-height: 20px;
+}
+
+.aliyun-column-settings-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    gap: 6px 12px;
+    max-height: 130px;
+    padding: 8px 10px;
+    overflow: auto;
+}
+
+.aliyun-column-settings-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    margin: 0;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    font-weight: 400;
+}
+
+.aliyun-column-settings-item span {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-resource-panel {
+    flex: 0 0 300px;
+    width: 300px;
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-resource-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 40px;
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-resource-title {
+    flex: 0 0 auto;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.aliyun-resource-tabs {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    padding: 2px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-resource-tab {
+    flex: 1 1 0;
+    border: 0;
+    border-radius: var(--aliyun-radius);
+    background: transparent;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 22px;
+}
+
+.aliyun-resource-tab.active {
+    border-top: 0;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+    color: var(--aliyun-primary);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-resource-pane {
+    display: none;
+    padding: 10px;
+}
+
+.aliyun-resource-pane.active {
+    display: block;
+}
+
+.aliyun-resource-tools {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.aliyun-resource-search {
+    position: relative;
+    display: flex;
+    align-items: center;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-resource-search > .fa {
+    flex: 0 0 28px;
+    width: 28px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.aliyun-resource-search input {
+    width: 100%;
+    height: 28px;
+    min-width: 0;
+    padding: 4px 8px 4px 0;
+    border: 0;
+    outline: none;
+    background: transparent;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.aliyun-resource-tools .fa {
+    color: var(--aliyun-primary);
+    font-size: 15px;
+}
+
+.aliyun-resource-icon-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    width: 30px;
+    height: 30px;
+    padding: 0;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 2px;
+    background: var(--aliyun-surface);
+    color: var(--aliyun-primary);
+    line-height: 1;
+    touch-action: manipulation;
+}
+
+.aliyun-resource-icon-btn:disabled {
+    color: var(--aliyun-text-muted);
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-resource-tools .is-loading .fa,
+.aliyun-resource-tools .fa.is-loading {
+    opacity: 0.55;
+    animation: aliyun-spin 0.8s linear infinite;
+    cursor: wait;
+}
+
+@keyframes aliyun-spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.aliyun-resource-panel #table-locator-results {
+    max-height: 180px;
+    overflow-y: auto;
+    margin-top: 5px;
+    padding-left: 0;
+    list-style: none;
+    background: #fff;
+}
+
+.aliyun-resource-section {
+    margin-top: 12px;
+    padding-top: 12px;
+    border-top: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-hidden-tool-slot {
+    display: none;
+}
+
+.aliyun-object-tree {
+    max-height: calc(100vh - 185px);
+    margin: 8px 0 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    background: transparent;
+}
+
+.aliyun-object-tree li {
+    min-height: 28px;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    cursor: default;
+}
+
+.aliyun-tree-row {
+    display: flex;
+    align-items: center;
+    min-height: 30px;
+    padding: 3px 6px;
+    border-radius: 2px;
+}
+
+.aliyun-table-node > .aliyun-tree-row,
+.aliyun-table-group > .aliyun-tree-row,
+.aliyun-program-group > .aliyun-tree-row {
+    cursor: pointer;
+}
+
+.aliyun-tree-row:hover {
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-object-tree .fa {
+    flex: 0 0 auto;
+    width: 16px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    text-align: center;
+}
+
+.aliyun-tree-toggle {
+    position: relative;
+    flex: 0 0 16px;
+    width: 16px;
+    color: var(--aliyun-text-muted);
+    font-size: 0;
+    text-align: center;
+}
+
+.aliyun-tree-toggle::before {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-top: 6px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid currentColor;
+    vertical-align: top;
+}
+
+.aliyun-table-node.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before,
+.aliyun-table-group.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before,
+.aliyun-program-group.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before {
+    transform: rotate(90deg);
+}
+
+.aliyun-tree-row > .aliyun-tree-toggle:empty::before,
+.aliyun-tree-loading .aliyun-tree-toggle::before,
+.aliyun-tree-empty .aliyun-tree-toggle::before,
+.aliyun-tree-error .aliyun-tree-toggle::before {
+    display: none;
+}
+
+.aliyun-tree-label {
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-tree-meta {
+    flex: 0 0 auto;
+    margin-left: 8px;
+    color: #0e7490;
+    font-size: 12px;
+}
+
+.aliyun-tree-actions {
+    display: none;
+    flex: 0 0 auto;
+    gap: 2px;
+    margin-left: 6px;
+}
+
+.aliyun-tree-row:hover .aliyun-tree-actions,
+.aliyun-tree-row:focus-within .aliyun-tree-actions,
+.aliyun-table-node.is-active > .aliyun-tree-row .aliyun-tree-actions,
+.aliyun-program-object-row:hover .aliyun-tree-actions {
+    display: inline-flex;
+}
+
+.aliyun-tree-action {
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 2px;
+    background: var(--aliyun-surface);
+    color: var(--aliyun-primary);
+    line-height: 24px;
+    touch-action: manipulation;
+}
+
+.aliyun-tree-action .fa {
+    width: auto;
+    color: inherit;
+    font-size: 11px;
+}
+
+.aliyun-tree-action.is-loading .fa,
+.aliyun-tree-action:disabled .fa {
+    opacity: 0.55;
+    animation: aliyun-spin 0.8s linear infinite;
+}
+
+.aliyun-tree-action:disabled {
+    cursor: wait;
+}
+
+.aliyun-table-node.is-active > .aliyun-tree-row .aliyun-tree-action {
+    border-color: rgba(255, 255, 255, 0.72);
+}
+
+.aliyun-program-object-row {
+    cursor: pointer;
+}
+
+.aliyun-program-definition {
+    display: none;
+    margin: 3px 6px 8px 22px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: 2px;
+    background: var(--aliyun-surface-muted);
+}
+
+.aliyun-program-definition.is-open {
+    display: block;
+}
+
+.aliyun-program-definition-tools {
+    display: flex;
+    justify-content: flex-end;
+    gap: 4px;
+    min-height: 26px;
+    padding: 3px 6px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-program-definition-code {
+    max-height: 260px;
+    margin: 0;
+    padding: 8px 10px;
+    overflow: auto;
+    border: 0;
+    background: transparent;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.aliyun-table-node.is-open > .aliyun-tree-children,
+.aliyun-table-group.is-open > .aliyun-tree-children,
+.aliyun-program-group.is-open > .aliyun-tree-children {
+    display: block;
+}
+
+.aliyun-tree-children {
+    display: none;
+    width: 100%;
+    margin: 0 0 0 20px;
+    padding: 0;
+    list-style: none;
+    border-left: 1px solid var(--aliyun-border);
+}
+
+.aliyun-tree-children li {
+    padding-left: 8px;
+}
+
+.aliyun-tree-loading,
+.aliyun-tree-empty,
+.aliyun-tree-error {
+    color: var(--aliyun-text-muted);
+    cursor: default;
+}
+
+.aliyun-tree-loading .aliyun-tree-row,
+.aliyun-tree-empty .aliyun-tree-row,
+.aliyun-tree-error .aliyun-tree-row {
+    cursor: default;
+}
+
+.aliyun-tree-error {
+    color: var(--aliyun-danger);
+}
+
+.aliyun-object-tree .is-active > .aliyun-tree-row {
+    background: var(--aliyun-primary);
+    color: #fff;
+}
+
+.aliyun-object-tree .is-active > .aliyun-tree-row .fa,
+.aliyun-object-tree .is-active > .aliyun-tree-row .aliyun-tree-toggle,
+.aliyun-object-tree .is-active > .aliyun-tree-row .aliyun-tree-meta {
+    color: #fff;
+}
+
+.aliyun-limit-slot {
+    margin-top: 12px;
+    position: relative;
+    overflow: hidden;
+}
+
+.aliyun-limit-slot > select.form-control {
+    left: 0 !important;
+    right: auto !important;
+    width: 100% !important;
+    max-width: 100%;
+}
+
+.aliyun-pg-explain {
+    margin: 8px 0;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-pg-explain-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 30px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-pg-explain-head strong {
+    color: var(--aliyun-text);
+    font-size: 13px;
+}
+
+.aliyun-pg-explain-body {
+    display: grid;
+    grid-template-columns: minmax(260px, 0.9fr) minmax(360px, 1.1fr);
+    gap: 0;
+}
+
+.aliyun-pg-explain-tree {
+    max-height: 280px;
+    overflow: auto;
+    border-right: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-plan-tree {
+    margin: 0;
+    padding: 0 0 0 14px;
+    list-style: none;
+}
+
+.aliyun-plan-tree > .aliyun-plan-node {
+    padding: 6px 8px 4px 0;
+}
+
+.aliyun-plan-node-line {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 22px;
+}
+
+.aliyun-plan-node-type {
+    flex: 0 0 auto;
+    color: var(--aliyun-primary);
+    font-weight: 600;
+    font-size: 12px;
+}
+
+.aliyun-plan-node-meta {
+    min-width: 0;
+    overflow: hidden;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-plan-node-details {
+    margin: 2px 0 0;
+    padding-left: 14px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    list-style: none;
+}
+
+.aliyun-pg-explain-table {
+    max-height: 280px;
+    overflow: auto;
+}
+
+.aliyun-plan-table {
+    margin-bottom: 0;
+    font-size: 12px;
+}
+
+.aliyun-plan-table > thead > tr > th {
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    white-space: nowrap;
+}
+
+.aliyun-plan-table > tbody > tr > td {
+    vertical-align: top;
+}
+
+.aliyun-pg-lock-chain {
+    margin: 8px 0;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-pg-lock-chain-head {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    min-height: 30px;
+    padding: 5px 8px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-pg-lock-chain-head strong {
+    color: var(--aliyun-text);
+    font-size: 13px;
+}
+
+.aliyun-pg-lock-chain-body {
+    max-height: 320px;
+    overflow: auto;
+}
+
+.aliyun-pg-lock-empty {
+    padding: 12px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-pg-lock-item {
+    padding: 8px 10px;
+    border-top: 1px solid #edf0f3;
+}
+
+.aliyun-pg-lock-item:first-child {
+    border-top: 0;
+}
+
+.aliyun-pg-lock-item.is-long-wait {
+    border-left: 3px solid var(--aliyun-warning);
+    background: #fff8ed;
+}
+
+.aliyun-pg-lock-flow {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 24px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-pg-lock-pid {
+    display: inline-flex;
+    align-items: center;
+    height: 22px;
+    padding: 0 7px;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text);
+}
+
+.aliyun-pg-lock-pid.blocking {
+    border-color: #f2b8a2;
+    color: var(--aliyun-danger);
+}
+
+.aliyun-pg-lock-duration {
+    margin-left: auto;
+    color: var(--aliyun-warning);
+}
+
+.aliyun-pg-lock-meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin-top: 5px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+}
+
+.aliyun-pg-lock-actions {
+    display: flex;
+    gap: 6px;
+    margin-top: 7px;
+}
+
+.aliyun-pg-lock-sql {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    gap: 8px;
+    margin-top: 7px;
+}
+
+.aliyun-pg-lock-sql label {
+    margin: 0 0 3px;
+    color: var(--aliyun-text-muted);
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.aliyun-pg-lock-sql pre {
+    max-height: 96px;
+    margin: 0;
+    padding: 6px 8px;
+    overflow: auto;
+    border: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+}
+
+.aliyun-favorite-toolbar {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+}
+
+.aliyun-favorite-add {
+    min-height: 32px;
+    padding: 5px 18px;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.aliyun-favorite-add .fa {
+    margin-right: 4px;
+}
+
+.aliyun-favorite-search {
+    display: flex;
+    align-items: center;
+    width: 360px;
+    height: 32px;
+    margin-left: 0;
+    border: 1px solid var(--aliyun-border);
+    background: var(--aliyun-surface);
+}
+
+.aliyun-page-notice {
+    position: fixed;
+    top: 72px;
+    left: 50%;
+    z-index: 2000;
+    display: none;
+    width: min(460px, calc(100vw - 32px));
+    max-width: 460px;
+    padding: 8px 14px;
+    border: 1px solid #b7e4c7;
+    background: #f0fff4;
+    color: #137333;
+    border-radius: 4px;
+    box-shadow: var(--aliyun-shadow);
+    font-size: 12px;
+    transform: translateX(-50%);
+}
+
+.aliyun-page-notice.is-error {
+    border-color: #f3b4b4;
+    background: #fff5f5;
+    color: #b91c1c;
+}
+
+.sqlquery-page-notice {
+    position: fixed;
+    top: 72px;
+    left: 50%;
+    z-index: 2000;
+    display: none;
+    width: min(460px, calc(100vw - 32px));
+    max-width: 460px;
+    padding: 8px 14px;
+    border: 1px solid #b7e4c7;
+    background: #f0fff4;
+    color: #137333;
+    border-radius: 4px;
+    box-shadow: var(--aliyun-shadow);
+    font-size: 12px;
+    transform: translateX(-50%);
+}
+
+.sqlquery-page-notice.is-error {
+    border-color: #f3b4b4;
+    background: #fff5f5;
+    color: #b91c1c;
+}
+
+.aliyun-favorite-search input {
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 30px;
+    padding: 4px 10px;
+    border: 0;
+    outline: none;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.aliyun-favorite-search .fa {
+    width: 34px;
+    color: var(--aliyun-text-muted);
+    text-align: center;
+    font-size: 14px;
+}
+
+.aliyun-favorite-table {
+    width: 100%;
+    margin-bottom: 0;
+    border: 1px solid var(--aliyun-border-soft);
+    table-layout: fixed;
+}
+
+.aliyun-favorite-table > thead > tr > th {
+    height: 36px;
+    border-bottom: 1px solid var(--aliyun-border-soft);
+    background: var(--aliyun-surface-muted);
+    color: var(--aliyun-text-muted);
+    font-size: 13px;
+    font-weight: 500;
+}
+
+.aliyun-favorite-row {
+    cursor: pointer;
+}
+
+.aliyun-favorite-row:hover {
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-favorite-row td {
+    overflow: hidden;
+    height: 38px;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-favorite-row td:nth-child(5) {
+    overflow: visible;
+}
+
+.aliyun-favorite-row .sql-text {
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.aliyun-favorite-sql-source {
+    display: none;
+}
+
+.aliyun-knowledge-row td {
+    overflow: hidden;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    text-overflow: ellipsis;
+    vertical-align: middle;
+}
+
+.aliyun-knowledge-row .sql-text,
+.aliyun-favorite-row .sql-text {
+    line-height: 1.45;
+}
+
+.aliyun-knowledge-row:hover {
+    background: var(--aliyun-primary-soft);
+}
+
+.aliyun-knowledge-table .btn,
+.aliyun-favorite-table .btn {
+    min-height: 26px;
+    padding: 3px 8px;
+}
+
+.aliyun-result-pane .fixed-table-container,
+.aliyun-history-pane .fixed-table-container {
+    border-color: var(--aliyun-border-soft);
+}
+
+.aliyun-result-pane .fixed-table-body,
+.aliyun-history-pane .fixed-table-body {
+    overflow-x: auto;
+}
+
+.aliyun-result-pane table,
+.aliyun-history-pane table {
+    font-size: 12px;
+}
+
+.aliyun-result-pane .fixed-table-body td,
+.aliyun-history-pane .fixed-table-body td {
+    vertical-align: middle;
+}
+
+/* SQLQuery is a dense DBA workbench: align controls to one rhythm. */
+.sqlquery-theme-root.is-aliyun {
+    background: #f3f5f8;
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-aliyun-console {
+    background: #f3f5f8;
+    color: var(--aliyun-text);
+    font-family: "Helvetica Neue", Arial, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.sqlquery-theme-root.is-aliyun .btn,
+.sqlquery-theme-root.is-aliyun button,
+.sqlquery-theme-root.is-aliyun input,
+.sqlquery-theme-root.is-aliyun select,
+.sqlquery-theme-root.is-aliyun textarea {
+    border-radius: var(--aliyun-radius);
+}
+
+.sqlquery-theme-root.is-aliyun .btn,
+.sqlquery-theme-root.is-aliyun .form-control,
+.sqlquery-theme-root.is-aliyun .dropdown-toggle {
+    box-shadow: none;
+}
+
+.sqlquery-theme-root.is-aliyun .btn:active,
+.sqlquery-theme-root.is-aliyun .btn.active,
+.sqlquery-theme-root.is-aliyun .open > .dropdown-toggle.btn-default {
+    box-shadow: inset 0 1px 2px rgba(16, 24, 40, 0.08);
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-theme-switch {
+    top: 60px;
+    right: 14px;
+    gap: 0;
+    height: var(--aliyun-control-height);
+    padding: 0;
+    overflow: hidden;
+    border-color: var(--aliyun-border);
+    background: #fff;
+    box-shadow: 0 4px 12px rgba(16, 24, 40, 0.10);
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-theme-switch .btn {
+    height: calc(var(--aliyun-control-height) - 2px);
+    min-height: calc(var(--aliyun-control-height) - 2px);
+    padding: 0 10px;
+    border: 0;
+    border-right: 1px solid var(--aliyun-border-soft);
+    border-radius: 0;
+    font-size: 12px;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.sqlquery-theme-root.is-aliyun .sqlquery-theme-switch .btn:last-child {
+    border-right: 0;
+}
+
+.aliyun-topbar {
+    align-items: center;
+    flex-wrap: nowrap;
+    gap: 8px;
+    min-height: 42px;
+    padding: 6px 158px 6px 12px;
+    background: #fff;
+    box-shadow: none;
+}
+
+.aliyun-engine-tag {
+    height: 22px;
+    padding: 0 7px;
+    border-radius: var(--aliyun-radius);
+    line-height: 20px;
+}
+
+.aliyun-select-group {
+    gap: 5px;
+}
+
+.aliyun-select-group > span {
+    height: var(--aliyun-control-height);
+    color: #475467;
+    font-size: 12px;
+    line-height: var(--aliyun-control-height);
+}
+
+.aliyun-topbar-slot.instance-slot {
+    min-width: 286px;
+}
+
+.aliyun-topbar-slot.database-slot {
+    min-width: 178px;
+}
+
+.aliyun-topbar-slot {
+    min-width: 128px;
+}
+
+.aliyun-topbar .bootstrap-select,
+.aliyun-topbar .form-control,
+.aliyun-resource-panel .bootstrap-select,
+.aliyun-resource-panel .form-control,
+.aliyun-knowledge-toolbar .bootstrap-select {
+    height: var(--aliyun-control-height) !important;
+    min-height: var(--aliyun-control-height);
+}
+
+.aliyun-topbar .btn.dropdown-toggle,
+.aliyun-resource-panel .btn.dropdown-toggle,
+.aliyun-resource-panel .form-control,
+.aliyun-mysql-panel .form-control,
+.aliyun-knowledge-toolbar .btn.dropdown-toggle {
+    display: inline-flex;
+    align-items: center;
+    height: var(--aliyun-control-height);
+    min-height: var(--aliyun-control-height);
+    padding: 0 8px;
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.aliyun-topbar .filter-option,
+.aliyun-resource-panel .filter-option,
+.aliyun-knowledge-toolbar .filter-option {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    line-height: 1.2;
+}
+
+.aliyun-topbar .bs-caret,
+.aliyun-resource-panel .bs-caret,
+.aliyun-knowledge-toolbar .bs-caret {
+    align-self: center;
+}
+
+.aliyun-topbar-actions {
+    gap: 10px;
+}
+
+.aliyun-permissions {
+    color: #667085;
+}
+
+.aliyun-icon-tools {
+    gap: 4px;
+    color: #475467;
+}
+
+.aliyun-icon-tools .fa,
+.aliyun-mysql-actions .fa {
+    width: var(--aliyun-icon-button);
+    height: var(--aliyun-icon-button);
+    border: 1px solid transparent;
+    color: #475467;
+    line-height: calc(var(--aliyun-icon-button) - 2px);
+    text-align: center;
+}
+
+.aliyun-icon-tools {
+    padding-left: 4px;
+    border-left: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-icon-tools .fa {
+    border-color: #e4e7ec;
+    background: #f8fafc;
+    color: #667085;
+    opacity: 0.82;
+}
+
+.aliyun-icon-tools .fa:hover {
+    background: #fff;
+    color: #344054;
+    opacity: 1;
+}
+
+.aliyun-toolbar-extra > i {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: var(--aliyun-icon-button);
+    height: var(--aliyun-icon-button);
+    border: 1px solid #e4e7ec;
+    border-radius: var(--aliyun-radius);
+    background: #f8fafc;
+    color: #667085;
+    font-size: 12px;
+}
+
+.aliyun-toolbar .btn[disabled] {
+    border-style: dashed;
+    background: #f8fafc;
+    color: #98a2b3;
+    opacity: 1;
+}
+
+.aliyun-main {
+    min-height: calc(100vh - 100px);
+    background: #fff;
+    border-top: 1px solid #eef1f5;
+}
+
+.aliyun-editor-area {
+    background: #fff;
+}
+
+.aliyun-console-tabs,
+.aliyun-workbench-tabs {
+    height: var(--aliyun-tab-height);
+    min-height: var(--aliyun-tab-height);
+    background: #f8fafc;
+}
+
+.aliyun-console-tab,
+.aliyun-console-add,
+.aliyun-console-menu,
+.aliyun-workbench-tab {
+    height: var(--aliyun-tab-height);
+    min-height: var(--aliyun-tab-height);
+    border-radius: 0;
+    font-size: 12px;
+    line-height: calc(var(--aliyun-tab-height) - 2px);
+}
+
+.aliyun-console-tab,
+.aliyun-workbench-tab {
+    border-top: 2px solid transparent;
+    background: #f8fafc;
+    color: #475467;
+    font-weight: 500;
+}
+
+.aliyun-console-tab,
+.aliyun-workbench-tab.active {
+    border-top-color: var(--aliyun-primary);
+    background: #fff;
+    color: var(--aliyun-primary);
+}
+
+.aliyun-workbench-tab.active {
+    background: #fff;
+}
+
+.aliyun-workbench-tab:first-child,
+.aliyun-mysql-tab:first-child {
+    border-left: 0;
+}
+
+.aliyun-console-add,
+.aliyun-console-menu {
+    width: var(--aliyun-tab-height);
+    color: #667085;
+}
+
+.aliyun-toolbar {
+    gap: 6px;
+    min-height: 40px;
+    padding: 5px 10px;
+    border-bottom-color: var(--aliyun-border);
+    background: #fbfcfe;
+}
+
+.aliyun-toolbar #div-query-actions,
+.aliyun-toolbar #aliyun-ai-slot,
+.aliyun-toolbar-extra,
+.aliyun-knowledge-toolbar,
+.aliyun-favorite-toolbar,
+.aliyun-resource-tools,
+.aliyun-result-summary {
+    gap: 6px;
+}
+
+.aliyun-toolbar .btn,
+.aliyun-toolbar input[type=button],
+.aliyun-result-summary .btn,
+.aliyun-favorite-add,
+.aliyun-knowledge-table .btn,
+.aliyun-favorite-table .btn,
+.aliyun-confirm-actions .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: var(--aliyun-control-height);
+    min-height: var(--aliyun-control-height);
+    padding: 0 10px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+    vertical-align: middle;
+}
+
+.aliyun-knowledge-table .btn,
+.aliyun-favorite-table .btn,
+.aliyun-tree-action {
+    height: 26px;
+    min-height: 26px;
+    padding: 0 8px;
+    line-height: 24px;
+}
+
+.aliyun-object-tree .aliyun-tree-action,
+.aliyun-program-definition-tools .aliyun-tree-action {
+    width: 24px;
+    height: 24px;
+    min-height: 24px;
+    padding: 0;
+    line-height: 22px;
+}
+
+.aliyun-toolbar #btn-sqlquery {
+    border-color: #1f6feb;
+    background: #1f6feb;
+}
+
+.aliyun-toolbar #btn-generatesql {
+    border-color: #475467;
+    background: #475467;
+}
+
+.aliyun-pg-analyze-option {
+    height: var(--aliyun-control-height);
+    min-height: var(--aliyun-control-height);
+    padding: 0 8px;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.aliyun-toolbar #generateDesc,
+.aliyun-result-search,
+.aliyun-result-export-name input,
+.aliyun-favorite-search,
+.aliyun-resource-search {
+    height: var(--aliyun-control-height);
+    min-height: var(--aliyun-control-height);
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+}
+
+.aliyun-toolbar #generateDesc {
+    padding: 4px 8px;
+}
+
+.aliyun-result-search input,
+.aliyun-favorite-search input,
+.aliyun-resource-search input {
+    height: calc(var(--aliyun-control-height) - 2px);
+    padding: 0 8px;
+    color: var(--aliyun-text);
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.aliyun-result-search .fa,
+.aliyun-favorite-search .fa {
+    width: var(--aliyun-control-height);
+    color: #667085;
+    line-height: var(--aliyun-control-height);
+}
+
+.aliyun-resource-icon-btn {
+    width: var(--aliyun-control-height);
+    height: var(--aliyun-control-height);
+    border-color: var(--aliyun-border);
+    background: #fff;
+    color: #475467;
+}
+
+.aliyun-editor-slot .ace_editor {
+    font-size: 13px;
+}
+
+.aliyun-mysql-panel {
+    border-top: 1px solid var(--aliyun-border);
+}
+
+.aliyun-workbench-tabs {
+    padding: 0;
+    gap: 0;
+}
+
+.aliyun-workbench-tab {
+    padding: 0 12px;
+    border-right-color: var(--aliyun-border-soft);
+}
+
+.aliyun-result-home-tab {
+    border-left: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-result-tab {
+    padding-right: 30px;
+    color: #344054;
+    font-weight: 400;
+}
+
+.aliyun-result-tabs {
+    gap: 0;
+    border-left: 1px solid var(--aliyun-border-soft);
+}
+
+.aliyun-result-tabs:empty {
+    display: none;
+}
+
+.aliyun-result-tab-close {
+    top: 3px;
+    right: 3px;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--aliyun-radius);
+    line-height: 22px;
+}
+
+.aliyun-workbench-pane {
+    padding: 8px 10px;
+}
+
+.aliyun-result-empty-pane {
+    min-height: 156px;
+    background: #fff;
+}
+
+.aliyun-result-empty-state {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 6px;
+    min-height: 130px;
+    border: 1px dashed #d0d7de;
+    background: #fbfcfe;
+    color: #667085;
+    font-size: 12px;
+}
+
+.aliyun-result-empty-state strong {
+    color: #344054;
+    font-size: 13px;
+    font-weight: 600;
+}
+
+.aliyun-mysql-tabs {
+    height: var(--aliyun-tab-height);
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: #f8fafc;
+}
+
+.aliyun-mysql-tab {
+    height: var(--aliyun-tab-height);
+    min-height: var(--aliyun-tab-height);
+    padding: 0 12px;
+    border: 0;
+    border-right: 1px solid var(--aliyun-border-soft);
+    border-bottom: 2px solid transparent;
+    border-radius: 0;
+    background: transparent;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: calc(var(--aliyun-tab-height) - 2px);
+}
+
+.aliyun-mysql-tab:last-child {
+    border-right: 0;
+}
+
+.aliyun-mysql-tab.active {
+    border-color: var(--aliyun-primary);
+    background: #fff;
+    color: var(--aliyun-primary);
+}
+
+.aliyun-knowledge-toolbar,
+.aliyun-favorite-toolbar {
+    min-height: var(--aliyun-control-height);
+    margin-bottom: 8px;
+}
+
+.aliyun-knowledge-toolbar > .bootstrap-select {
+    width: 120px !important;
+}
+
+.aliyun-favorite-add {
+    padding: 0 12px;
+}
+
+.aliyun-favorite-add .fa {
+    margin-right: 5px;
+    font-size: 11px;
+}
+
+.aliyun-knowledge-table,
+.aliyun-favorite-table {
+    border-color: var(--aliyun-border);
+    background: #fff;
+}
+
+.aliyun-knowledge-table > thead > tr > th,
+.aliyun-favorite-table > thead > tr > th,
+.aliyun-result-pane .fixed-table-container thead th,
+.aliyun-history-pane .fixed-table-container thead th,
+.aliyun-plan-table > thead > tr > th {
+    height: var(--aliyun-row-height);
+    padding: 0 8px;
+    border-color: var(--aliyun-border-soft);
+    background: #f8fafc;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: calc(var(--aliyun-row-height) - 2px);
+    vertical-align: middle;
+}
+
+.aliyun-knowledge-row td,
+.aliyun-favorite-row td,
+.aliyun-result-pane .fixed-table-body td,
+.aliyun-history-pane .fixed-table-body td,
+.aliyun-plan-table > tbody > tr > td {
+    height: var(--aliyun-row-height);
+    padding: 5px 8px;
+    border-color: #edf0f3;
+    color: var(--aliyun-text);
+    font-size: 12px;
+    line-height: 18px;
+    vertical-align: middle;
+}
+
+.aliyun-knowledge-row .sql-text,
+.aliyun-favorite-row .sql-text,
+.aliyun-result-sql,
+.aliyun-program-definition-code,
+.aliyun-pg-lock-sql pre {
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+}
+
+.aliyun-knowledge-row .sql-text,
+.aliyun-favorite-row .sql-text {
+    display: block;
+    overflow: hidden;
+    max-height: 36px;
+    line-height: 18px;
+    text-overflow: ellipsis;
+}
+
+.aliyun-knowledge-row:hover,
+.aliyun-favorite-row:hover,
+.aliyun-tree-row:hover {
+    background: #f2f7ff;
+}
+
+.aliyun-resource-panel {
+    flex-basis: 310px;
+    width: 310px;
+    border-left: 0;
+    background: #f8fafc;
+}
+
+.aliyun-resource-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    min-height: 42px;
+    padding: 7px 8px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: #fff;
+}
+
+.aliyun-resource-title {
+    flex: 0 0 auto;
+    color: #182230;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 24px;
+}
+
+.aliyun-resource-tabs {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    height: 28px;
+    min-height: 28px;
+    padding: 2px;
+    overflow: visible;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    background: #f8fafc;
+}
+
+.aliyun-resource-tab {
+    flex: 1 1 0;
+    height: 22px;
+    min-height: 22px;
+    padding: 0 10px;
+    overflow: hidden;
+    border: 0;
+    border-radius: var(--aliyun-radius);
+    background: transparent;
+    color: #475467;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 22px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.aliyun-resource-tab.active {
+    border-top: 0;
+    box-shadow: 0 1px 2px rgba(16, 24, 40, 0.08);
+    background: #fff;
+    color: var(--aliyun-primary);
+}
+
+.aliyun-resource-pane {
+    padding: 8px;
+}
+
+.aliyun-resource-tools {
+    margin-bottom: 8px;
+}
+
+.aliyun-resource-search {
+    display: flex;
+    align-items: center;
+    height: 30px;
+    border: 1px solid #e4e7ec;
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+}
+
+.aliyun-resource-search > .fa {
+    flex: 0 0 28px;
+    width: 28px;
+    color: #667085;
+    font-size: 12px;
+    text-align: center;
+}
+
+.aliyun-resource-search input {
+    height: 28px;
+    min-width: 0;
+    padding: 0 8px 0 0;
+    background: transparent;
+    line-height: 28px;
+}
+
+.aliyun-resource-icon-btn {
+    border-color: #d0d7de;
+    background: #fff;
+    color: #475467;
+}
+
+.aliyun-resource-icon-btn:hover {
+    border-color: #8c9bb0;
+    background: #f2f7ff;
+    color: var(--aliyun-primary);
+}
+
+.aliyun-resource-icon-btn:disabled {
+    border-color: #e4e7ec;
+    background: #f8fafc;
+    color: #98a2b3;
+    opacity: 1;
+}
+
+.aliyun-resource-pane > .text-muted.aliyun-resource-helper {
+    display: none;
+    margin: 0 0 8px;
+    padding: 6px 8px;
+    border: 1px solid #e4e7ec;
+    border-radius: var(--aliyun-radius);
+    background: #fff;
+    color: #667085;
+    font-size: 12px;
+    line-height: 18px;
+}
+
+.aliyun-resource-pane > .text-muted.aliyun-resource-helper.is-visible {
+    display: block;
+}
+
+.aliyun-object-tree {
+    margin-top: 6px;
+}
+
+.aliyun-object-tree li {
+    min-height: 28px;
+}
+
+.aliyun-tree-row {
+    min-height: 28px;
+    padding: 2px 6px;
+    border-radius: var(--aliyun-radius);
+    line-height: 20px;
+}
+
+.aliyun-object-tree .fa,
+.aliyun-tree-toggle {
+    width: 18px;
+    flex-basis: 18px;
+    color: #667085;
+    font-size: 12px;
+    line-height: 20px;
+}
+
+.aliyun-tree-toggle {
+    position: relative;
+    font-size: 0;
+}
+
+.aliyun-tree-toggle::before {
+    content: "";
+    display: inline-block;
+    width: 0;
+    height: 0;
+    margin-top: 6px;
+    border-top: 4px solid transparent;
+    border-bottom: 4px solid transparent;
+    border-left: 5px solid currentColor;
+    vertical-align: top;
+}
+
+.aliyun-table-node.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before,
+.aliyun-table-group.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before,
+.aliyun-program-group.is-open > .aliyun-tree-row > .aliyun-tree-toggle::before {
+    transform: rotate(90deg);
+}
+
+.aliyun-tree-row > .aliyun-tree-toggle:empty::before,
+.aliyun-tree-loading .aliyun-tree-toggle::before,
+.aliyun-tree-empty .aliyun-tree-toggle::before,
+.aliyun-tree-error .aliyun-tree-toggle::before {
+    display: none;
+}
+
+.aliyun-tree-meta {
+    color: #0969da;
+    font-size: 11px;
+}
+
+.aliyun-tree-children {
+    margin-left: 18px;
+}
+
+.aliyun-object-tree .is-active > .aliyun-tree-row {
+    background: #1f6feb;
+}
+
+.aliyun-program-definition,
+.aliyun-pg-explain,
+.aliyun-pg-lock-chain,
+.aliyun-column-settings-panel {
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    box-shadow: none;
+}
+
+.aliyun-program-definition-tools,
+.aliyun-pg-explain-head,
+.aliyun-pg-lock-chain-head,
+.aliyun-column-settings-head {
+    min-height: var(--aliyun-control-height);
+    padding: 0 8px;
+    background: #f8fafc;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.aliyun-result-summary {
+    display: grid;
+    grid-template-columns: minmax(220px, auto) minmax(240px, 1fr);
+    gap: 6px 10px;
+    align-items: center;
+    min-height: var(--aliyun-control-height);
+    margin: 0 0 8px;
+    padding: 8px;
+    border: 1px solid var(--aliyun-border);
+    background: #fbfcfe;
+}
+
+.aliyun-result-summary-main,
+.aliyun-result-summary-tools,
+.aliyun-result-summary-sql {
+    display: flex;
+    align-items: center;
+    min-width: 0;
+}
+
+.aliyun-result-summary-main {
+    gap: 6px;
+}
+
+.aliyun-result-summary-tools {
+    justify-content: flex-end;
+    gap: 6px;
+}
+
+.aliyun-result-summary-sql {
+    grid-column: 1 / -1;
+    gap: 6px;
+}
+
+.aliyun-result-metric {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    height: 24px;
+    padding: 0 7px;
+    border: 1px solid #e4e7ec;
+    background: #fff;
+    color: #667085;
+    font-size: 12px;
+}
+
+.aliyun-result-metric strong {
+    color: #182230;
+    font-weight: 600;
+}
+
+.aliyun-result-sql-label {
+    flex: 0 0 auto;
+    height: 22px;
+    padding: 0 6px;
+    border: 1px solid #d0d7de;
+    background: #fff;
+    color: #667085;
+    font-size: 11px;
+    line-height: 20px;
+}
+
+.aliyun-result-sql {
+    flex: 1 1 auto;
+    min-width: 120px;
+    height: 24px;
+    padding: 0 8px;
+    border: 1px solid #e4e7ec;
+    background: #fff;
+    color: #344054;
+    font-size: 12px;
+    line-height: 22px;
+}
+
+.aliyun-result-more {
+    position: relative;
+}
+
+.aliyun-result-more-menu {
+    min-width: 136px;
+    padding: 4px;
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.14);
+}
+
+.aliyun-result-more-menu > li > .aliyun-result-menu-action {
+    display: block;
+    width: 100%;
+    height: 28px;
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: #344054;
+    font-size: 12px;
+    line-height: 28px;
+    text-align: left;
+}
+
+.aliyun-result-more-menu > li > .aliyun-result-menu-action:hover {
+    background: #eef5ff;
+    color: var(--aliyun-primary);
+}
+
+.aliyun-result-more-menu .divider {
+    margin: 4px 0;
+}
+
+.aliyun-result-export-name {
+    flex: 0 0 auto;
+    margin-left: 6px;
+}
+
+.aliyun-result-export-name > span {
+    color: #667085;
+}
+
+.aliyun-result-export-name input {
+    width: 178px;
+}
+
+.aliyun-result-pane .fixed-table-toolbar,
+.aliyun-history-pane .bootstrap-table .fixed-table-toolbar {
+    margin-bottom: 6px;
+}
+
+.aliyun-result-pane .fixed-table-toolbar .search {
+    display: none;
+}
+
+.aliyun-result-pane .fixed-table-toolbar .search input,
+.aliyun-result-pane .fixed-table-toolbar .btn,
+.aliyun-history-pane .fixed-table-toolbar .search input,
+.aliyun-history-pane .fixed-table-toolbar .btn {
+    height: var(--aliyun-control-height);
+    min-height: var(--aliyun-control-height);
+    padding: 0 8px;
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    font-size: 12px;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.aliyun-page-notice,
+.sqlquery-page-notice {
+    border-radius: var(--aliyun-radius);
+    box-shadow: 0 8px 18px rgba(16, 24, 40, 0.12);
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-dialog {
+    width: min(620px, calc(100vw - 32px));
+    margin-top: 72px;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-content {
+    overflow: hidden;
+    border: 1px solid var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    box-shadow: 0 18px 42px rgba(16, 24, 40, 0.24);
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-header {
+    min-height: 42px;
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--aliyun-border);
+    background: #f8fafc;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-title {
+    color: #182230;
+    font-size: 14px;
+    font-weight: 600;
+    line-height: 20px;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .close {
+    margin-top: 0;
+    color: #667085;
+    opacity: 1;
+    text-shadow: none;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-body {
+    padding: 14px;
+    background: #fff;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .form-group {
+    margin-bottom: 12px;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal label {
+    margin-bottom: 5px;
+    color: #344054;
+    font-size: 12px;
+    font-weight: 600;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .form-control,
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .btn.dropdown-toggle {
+    min-height: var(--aliyun-control-height);
+    border-color: var(--aliyun-border);
+    border-radius: var(--aliyun-radius);
+    box-shadow: none;
+    font-size: 12px;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal textarea.form-control {
+    min-height: 160px;
+    font-family: Menlo, Monaco, Consolas, "Courier New", monospace;
+    line-height: 1.5;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-footer {
+    padding: 10px 14px;
+    border-top: 1px solid var(--aliyun-border);
+    background: #f8fafc;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-footer .btn {
+    min-width: 64px;
+    height: var(--aliyun-control-height);
+    padding: 0 12px;
+    font-size: 12px;
+    line-height: calc(var(--aliyun-control-height) - 2px);
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-footer .btn-primary {
+    border-color: var(--aliyun-primary);
+    background: var(--aliyun-primary);
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-console-modal .modal-footer .aliyun-modal-cancel {
+    border-color: var(--aliyun-border);
+    background: #fff;
+    color: #344054;
+}
+
+/* DMS-aligned visual layer for the Aliyun SQL console theme. */
+.sqlquery-theme-root.is-aliyun {
+    background: #f4f6f8;
+}
+
+.sqlquery-aliyun-console {
+    background: #fff;
+    color: #333;
+}
+
+.aliyun-topbar {
+    min-height: 40px;
+    padding: 5px 158px 5px 12px;
+    border-top: 1px solid #e5e9ef;
+    border-bottom: 1px solid #cfd6df;
+    background: #fff;
+    box-shadow: inset 0 -1px 0 #f3f5f8;
+}
+
+.aliyun-env-tag {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: 0 0 auto;
+    height: 24px;
+    padding: 0 10px;
+    background: #fff3e8;
+    color: #ff6a00;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 22px;
+}
+
+.aliyun-engine-tag {
+    display: inline-flex !important;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: 1px solid #d6dce5;
+    border-radius: 0;
+    background: #fff;
+    color: #4f5f72;
+    font-size: 0;
+    line-height: 22px;
+}
+
+.aliyun-engine-tag::before {
+    content: "\f1c0";
+    font-family: FontAwesome;
+    color: #4f5f72;
+    font-size: 13px;
+}
+
+.aliyun-select-group {
+    gap: 0;
+    min-width: 0;
+}
+
+.aliyun-select-group > span:not(.aliyun-engine-tag) {
+    display: none;
+}
+
+.aliyun-topbar-slot.instance-slot {
+    min-width: 386px;
+}
+
+.aliyun-topbar-slot.database-slot {
+    min-width: 190px;
+}
+
+.aliyun-topbar .bootstrap-select,
+.aliyun-topbar .form-control {
+    height: 30px !important;
+    min-height: 30px;
+}
+
+.aliyun-topbar .btn.dropdown-toggle,
+.aliyun-topbar .form-control {
+    height: 30px;
+    min-height: 30px;
+    border-color: #cfd6df;
+    border-radius: 0;
+    background: #fff;
+    color: #333;
+    box-shadow: none;
+    font-size: 12px;
+    line-height: 28px;
+}
+
+.aliyun-topbar .filter-option {
+    font-size: 12px;
+}
+
+.aliyun-permissions {
+    color: #333;
+    font-size: 12px;
+}
+
+.aliyun-icon-tools {
+    gap: 14px;
+    padding-left: 8px;
+    border-left: 0;
+}
+
+.aliyun-icon-tools .fa {
+    width: 22px;
+    height: 22px;
+    border: 0;
+    background: transparent;
+    color: #0b63ff;
+    font-size: 14px;
+    opacity: 1;
+}
+
+.aliyun-icon-tools .fa:hover {
+    background: transparent;
+    color: #005ec9;
+}
+
+.aliyun-main {
+    min-height: calc(100vh - 98px);
+    border-top: 0;
+    background: #fff;
+}
+
+.aliyun-toolbar,
+.aliyun-workbench-tabs,
+.aliyun-mysql-tabs,
+.aliyun-resource-tabs {
+    background: #f5f6f8;
+}
+
+.aliyun-toolbar {
+    min-height: 38px;
+    padding: 5px 10px;
+    border-bottom: 1px solid #e1e6ed;
+}
+
+.aliyun-toolbar .btn,
+.aliyun-toolbar input[type=button],
+.aliyun-favorite-add,
+.aliyun-result-summary .btn,
+.aliyun-confirm-actions .btn {
+    border-color: #d6dce5;
+    border-radius: 3px;
+    background: #fff;
+    color: #333;
+    box-shadow: none;
+}
+
+.aliyun-toolbar #btn-sqlquery {
+    border-color: #0070cc;
+    background: #0070cc;
+    color: #fff;
+}
+
+.aliyun-toolbar #btn-generatesql {
+    border-color: #0070cc;
+    background: #0070cc;
+    color: #fff;
+}
+
+.aliyun-toolbar #generateDesc,
+.aliyun-result-search,
+.aliyun-result-export-name input,
+.aliyun-favorite-search,
+.aliyun-resource-search {
+    border-color: #d6dce5;
+    border-radius: 0;
+    background: #fff;
+}
+
+.aliyun-console-tabs,
+.aliyun-workbench-tabs {
+    border-bottom-color: #dfe5ec;
+}
+
+.aliyun-console-tab,
+.aliyun-workbench-tab {
+    border-top: 2px solid transparent;
+    border-right: 1px solid #e1e6ed;
+    background: #f7f8fa;
+    color: #333;
+}
+
+.aliyun-console-tab,
+.aliyun-workbench-tab.active {
+    border-top-color: #0070cc;
+    background: #fff;
+    color: #0070cc;
+}
+
+.aliyun-mysql-panel {
+    border-top: 1px solid #cfd6df;
+    background: #fff;
+}
+
+.aliyun-workbench-tabs {
+    height: 34px;
+    min-height: 34px;
+}
+
+.aliyun-workbench-tab {
+    height: 34px;
+    min-height: 34px;
+    padding: 0 13px;
+    line-height: 32px;
+}
+
+.aliyun-workbench-pane {
+    padding: 9px 12px;
+}
+
+.aliyun-mysql-tabs {
+    height: 32px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid #d6dce5;
+}
+
+.aliyun-mysql-tab {
+    height: 32px;
+    min-height: 32px;
+    padding: 0 16px;
+    border: 1px solid #d6dce5;
+    border-right: 0;
+    border-bottom-color: #d6dce5;
+    background: #fff;
+    color: #333;
+    line-height: 30px;
+}
+
+.aliyun-mysql-tab:last-child {
+    border-right: 1px solid #d6dce5;
+}
+
+.aliyun-mysql-tab.active {
+    border-color: #0070cc;
+    background: #fff;
+    color: #0070cc;
+}
+
+.aliyun-knowledge-toolbar,
+.aliyun-favorite-toolbar {
+    gap: 6px;
+    min-height: 32px;
+    margin-bottom: 8px;
+}
+
+.aliyun-knowledge-toolbar .btn.dropdown-toggle,
+.aliyun-favorite-toolbar .btn.dropdown-toggle,
+.aliyun-mysql-panel .form-control {
+    border-radius: 0;
+}
+
+.aliyun-knowledge-table,
+.aliyun-favorite-table {
+    border-color: #dfe5ec;
+}
+
+.aliyun-knowledge-table > thead > tr > th,
+.aliyun-favorite-table > thead > tr > th,
+.aliyun-result-pane .fixed-table-container thead th,
+.aliyun-history-pane .fixed-table-container thead th,
+.aliyun-plan-table > thead > tr > th {
+    border-color: #e5e9ef;
+    background: #f7f8fa;
+    color: #333;
+}
+
+.aliyun-knowledge-row td,
+.aliyun-favorite-row td,
+.aliyun-result-pane .fixed-table-body td,
+.aliyun-history-pane .fixed-table-body td,
+.aliyun-plan-table > tbody > tr > td {
+    border-color: #edf0f4;
+    color: #333;
+}
+
+.aliyun-knowledge-row:hover,
+.aliyun-favorite-row:hover,
+.aliyun-tree-row:hover {
+    background: #eaf6ff;
+}
+
+.aliyun-resource-panel {
+    flex-basis: 310px;
+    width: 310px;
+    border-left: 1px solid #cfd6df;
+    background: #f5f7fa;
+}
+
+.aliyun-resource-header,
+.aliyun-resource-title {
+    display: none;
+}
+
+.aliyun-resource-tabs {
+    display: flex;
+    height: 34px;
+    min-height: 34px;
+    padding: 0;
+    border: 0;
+    border-bottom: 1px solid #d6dce5;
+    border-radius: 0;
+    background: #f7f8fa;
+}
+
+.aliyun-resource-tab {
+    height: 34px;
+    min-height: 34px;
+    padding: 0 14px;
+    border: 0;
+    border-top: 2px solid transparent;
+    border-right: 1px solid #dfe5ec;
+    border-radius: 0;
+    background: #f7f8fa;
+    color: #333;
+    font-size: 12px;
+    line-height: 32px;
+}
+
+.aliyun-resource-tab.active {
+    border-top-color: #0070cc;
+    box-shadow: none;
+    background: #fff;
+    color: #0070cc;
+}
+
+.aliyun-resource-pane {
+    padding: 10px 8px;
+}
+
+.aliyun-resource-tools {
+    gap: 6px;
+    margin-bottom: 6px;
+}
+
+.aliyun-resource-search {
+    border-color: #d6dce5;
+    border-radius: 0;
+    background: #fff;
+}
+
+.aliyun-resource-icon-btn {
+    border-color: #d6dce5;
+    border-radius: 0;
+    background: #fff;
+    color: #0b63ff;
+}
+
+.aliyun-resource-icon-btn:hover {
+    border-color: #b8c3d1;
+    background: #fff;
+    color: #005ec9;
+}
+
+.aliyun-resource-icon-btn:disabled {
+    border-color: #dfe5ec;
+    background: #f7f8fa;
+    color: #9aa5b1;
+}
+
+.aliyun-resource-pane > .text-muted.aliyun-resource-helper {
+    padding: 0 8px;
+    border: 0;
+    background: transparent;
+    color: #777;
+    line-height: 22px;
+}
+
+.aliyun-object-tree {
+    margin-top: 6px;
+}
+
+.aliyun-tree-row {
+    min-height: 27px;
+    padding: 2px 6px;
+    border-radius: 0;
+    color: #333;
+}
+
+.aliyun-object-tree .fa,
+.aliyun-tree-toggle {
+    color: #6b7280;
+}
+
+.aliyun-tree-children {
+    margin-left: 16px;
+    border-left: 1px solid #dfe5ec;
+}
+
+.aliyun-tree-children li {
+    padding-left: 7px;
+}
+
+.aliyun-tree-meta {
+    color: #17b7d7;
+    font-size: 12px;
+}
+
+.aliyun-object-tree .is-active > .aliyun-tree-row {
+    background: #0070cc;
+    color: #fff;
+}
+
+.aliyun-object-tree .is-active > .aliyun-tree-row .fa,
+.aliyun-object-tree .is-active > .aliyun-tree-row .aliyun-tree-toggle,
+.aliyun-object-tree .is-active > .aliyun-tree-row .aliyun-tree-meta {
+    color: #fff;
+}
+
+.aliyun-limit-slot {
+    margin-top: 10px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .sqlquery-theme-root.is-aliyun *,
+    .aliyun-resource-tools .is-loading .fa,
+    .aliyun-resource-tools .fa.is-loading,
+    .aliyun-tree-action.is-loading .fa,
+    .aliyun-tree-action:disabled .fa {
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+        transition-duration: 0.01ms !important;
+    }
+}
+
+@media (max-width: 1200px) {
+    .aliyun-topbar {
+        padding-right: 96px;
+    }
+
+    .aliyun-icon-tools {
+        display: none;
+    }
+
+    .aliyun-main {
+        flex-direction: column;
+    }
+
+    .aliyun-resource-panel {
+        flex: 0 0 auto;
+        width: 100%;
+        border-top: 1px solid var(--aliyun-border);
+    }
+
+    .aliyun-object-tree {
+        max-height: 340px;
+    }
+
+    .aliyun-pg-explain-body {
+        grid-template-columns: 1fr;
+    }
+
+    .aliyun-pg-explain-tree {
+        border-right: 0;
+        border-bottom: 1px solid var(--aliyun-border-soft);
+    }
+}
+
+@media (max-width: 768px) {
+    .sqlquery-theme-root.is-aliyun {
+        margin: -10px -10px 0;
+        overflow-x: hidden;
+    }
+
+    .sqlquery-theme-root.is-aliyun .sqlquery-theme-switch {
+        top: auto;
+        right: 12px;
+        bottom: 12px;
+    }
+
+    .aliyun-topbar,
+    .aliyun-toolbar,
+    .aliyun-topbar-actions,
+    .aliyun-mysql-tabs,
+    .aliyun-knowledge-toolbar,
+    .aliyun-favorite-toolbar,
+    .aliyun-pg-lock-sql {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .aliyun-topbar {
+        padding: 8px 10px;
+    }
+
+    .aliyun-select-group {
+        align-items: stretch;
+        flex-direction: column;
+        gap: 3px;
+        width: 100%;
+    }
+
+    .aliyun-topbar-slot,
+    .aliyun-topbar-slot.instance-slot,
+    .aliyun-topbar-slot.database-slot,
+    .aliyun-topbar .bootstrap-select,
+    .aliyun-topbar .form-control,
+    .aliyun-resource-panel .bootstrap-select,
+    .aliyun-resource-panel .form-control,
+    .aliyun-toolbar #generateDesc,
+    .aliyun-favorite-search,
+    .aliyun-result-search,
+    .aliyun-result-export-name input {
+        width: 100%;
+        min-width: 0;
+    }
+
+    .aliyun-topbar select.form-control,
+    .aliyun-resource-panel select.form-control,
+    .aliyun-mysql-panel select.form-control {
+        max-width: 100%;
+    }
+
+    .aliyun-toolbar #div-query-actions,
+    .aliyun-toolbar #aliyun-ai-slot,
+    .aliyun-toolbar-extra,
+    .aliyun-result-summary,
+    .aliyun-pg-lock-actions {
+        align-items: stretch;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .aliyun-toolbar .btn,
+    .aliyun-toolbar input[type=button],
+    .aliyun-result-summary .btn,
+    .aliyun-favorite-add {
+        width: 100%;
+        min-height: 36px;
+    }
+
+    .aliyun-workbench-tabs {
+        padding: 0 6px;
+    }
+
+    .aliyun-workbench-tab {
+        min-height: var(--aliyun-tab-height);
+        line-height: calc(var(--aliyun-tab-height) - 2px);
+    }
+
+    .aliyun-workbench-pane {
+        padding: 8px;
+    }
+
+    .aliyun-knowledge-table,
+    .aliyun-favorite-table {
+        min-width: 760px;
+    }
+
+    .aliyun-knowledge-toolbar .bootstrap-select {
+        width: 100% !important;
+    }
+
+    .aliyun-mysql-pane .table-responsive {
+        width: 100%;
+        overflow-x: auto;
+    }
+
+    .aliyun-pg-lock-flow,
+    .aliyun-pg-lock-meta {
+        align-items: flex-start;
+        flex-direction: column;
+    }
+
+    .aliyun-pg-lock-duration {
+        margin-left: 0;
+    }
+}
+
+@media (max-width: 480px) {
+    .aliyun-permissions,
+    .aliyun-icon-tools,
+    .aliyun-mysql-actions {
+        display: none;
+    }
+
+    .aliyun-console-tab {
+        padding: 0 12px;
+    }
+
+    .aliyun-mysql-tabs {
+        overflow-x: auto;
+    }
+
+    .aliyun-mysql-tab {
+        flex: 0 0 auto;
+        min-width: 120px;
+    }
+
+    .aliyun-resource-header {
+        align-items: stretch;
+    }
+
+    .aliyun-resource-title {
+        line-height: 28px;
+    }
+
+    .aliyun-resource-tabs {
+        overflow: visible;
+    }
+
+    .aliyun-resource-tab {
+        min-width: 0;
+    }
+
+    .aliyun-tree-actions {
+        display: inline-flex;
+    }
+}
+
+/* Stable database glyph: avoid font baseline clipping in the DMS topbar. */
+.sqlquery-theme-root.is-aliyun .aliyun-select-group {
+    align-items: stretch;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag {
+    position: relative;
+    display: none !important;
+    flex: 0 0 30px;
+    align-items: center;
+    justify-content: center;
+    width: 30px;
+    min-width: 30px;
+    height: 30px;
+    min-height: 30px;
+    margin-right: -1px;
+    padding: 0;
+    overflow: visible;
+    border: 1px solid #cfd6df;
+    border-radius: 0;
+    background: #fff;
+    color: #4b5c70;
+    font-size: 0;
+    line-height: 0;
+    box-sizing: border-box;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag.has-engine {
+    display: inline-flex !important;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag::before {
+    content: "";
+    position: absolute;
+    left: 7px;
+    top: 7px;
+    width: 16px;
+    height: 16px;
+    border: 0;
+    background-color: currentColor;
+    -webkit-mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cellipse%20cx='12'%20cy='5'%20rx='7.5'%20ry='3'%2F%3E%3Cpath%20d='M4.5%205v10c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3V5'%2F%3E%3Cpath%20d='M4.5%2010c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3'%2F%3E%3Cpath%20d='M4.5%2015c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3'%2F%3E%3C/svg%3E") center / 16px 16px no-repeat;
+    mask: url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20viewBox='0%200%2024%2024'%20fill='none'%20stroke='black'%20stroke-width='1.8'%20stroke-linecap='round'%20stroke-linejoin='round'%3E%3Cellipse%20cx='12'%20cy='5'%20rx='7.5'%20ry='3'%2F%3E%3Cpath%20d='M4.5%205v10c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3V5'%2F%3E%3Cpath%20d='M4.5%2010c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3'%2F%3E%3Cpath%20d='M4.5%2015c0%201.7%203.4%203%207.5%203s7.5-1.3%207.5-3'%2F%3E%3C/svg%3E") center / 16px 16px no-repeat;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag::after {
+    content: none;
+}
+
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag.has-engine + .aliyun-topbar-slot .btn.dropdown-toggle,
+.sqlquery-theme-root.is-aliyun .aliyun-engine-tag.has-engine + .aliyun-topbar-slot .form-control {
+    border-left-color: #d8dee8;
+}

@@ -23,6 +23,7 @@ from django_q.tasks import async_task
 from common.config import SysConfig
 from common.utils.const import WorkflowStatus, WorkflowType, WorkflowAction
 from common.utils.extend_json_encoder import ExtendJSONEncoder
+from sql.engines import get_engine
 from sql.engines.goinception import GoInceptionEngine
 from sql.models import QueryPrivilegesApply, QueryPrivileges, Instance, ResourceGroup
 from sql.notify import notify_for_audit
@@ -36,7 +37,7 @@ __author__ = "hhyo"
 
 
 # TODO 权限校验内的语法解析和判断独立到每个engine内
-def query_priv_check(user, instance, db_name, sql_content, limit_num):
+def query_priv_check(user, instance, db_name, sql_content, limit_num, schema_name=None):
     """
     查询权限校验
     :param user:
@@ -44,6 +45,7 @@ def query_priv_check(user, instance, db_name, sql_content, limit_num):
     :param db_name:
     :param sql_content:
     :param limit_num:
+    :param schema_name: pgsql 当前选择的 schema, 用于补全 SQL 中不带 schema 的表引用
     :return:
     """
     result = {"status": 0, "msg": "ok", "data": {"priv_check": True, "limit_num": 0}}
@@ -97,10 +99,58 @@ def query_priv_check(user, instance, db_name, sql_content, limit_num):
             )
             result["status"] = 1
             result["msg"] = f"无法校验查询语句权限，请联系管理员，错误信息：{msg}"
+    # pgsql 支持库级/表级(schema.table)校验
+    elif instance.db_type == "pgsql":
+        try:
+            # explain和show跳过权限校验
+            if re.match(r"^explain|^show", sql_content, re.I):
+                return result
+            # 拥有当前库的库权限则视为拥有全部权限(向后兼容库级授权)
+            db_limit = _db_priv(user, instance, db_name)
+            if db_limit:
+                result["data"]["limit_num"] = (
+                    min(db_limit, limit_num) if limit_num else db_limit
+                )
+                return result
+            # 无库权限则解析语句涉及的表, 逐表校验表权限
+            engine = get_engine(instance=instance)
+            table_ref = engine.get_table_ref(
+                sql_content, db_name=db_name, schema_name=schema_name
+            )
+            # 无法解析出表(如 select 1)时, 按无库权限处理, 拒绝
+            if not table_ref:
+                result["status"] = 2
+                result["msg"] = (
+                    f"你无{db_name}数据库的查询权限！请先到查询权限管理进行申请"
+                )
+                return result
+            # 逐表校验, 表名以 schema.table 形式存储在权限记录中
+            for table in table_ref:
+                tb_name = f"{table['schema']}.{table['name']}"
+                if not _tb_priv(user, instance, db_name, tb_name):
+                    result["status"] = 2
+                    result["msg"] = (
+                        f"你无{db_name}.{tb_name}表的查询权限！请先到查询权限管理进行申请"
+                    )
+                    return result
+            # 有全部表权限则获取最小limit值
+            for table in table_ref:
+                tb_name = f"{table['schema']}.{table['name']}"
+                priv_limit = _priv_limit(
+                    user, instance, db_name=db_name, tb_name=tb_name
+                )
+                limit_num = min(priv_limit, limit_num) if limit_num else priv_limit
+            result["data"]["limit_num"] = limit_num
+        except Exception as msg:
+            logger.error(
+                f"无法校验查询语句权限，{instance.instance_name}，{sql_content}，{traceback.format_exc()}"
+            )
+            result["status"] = 1
+            result["msg"] = f"无法校验查询语句权限，请联系管理员，错误信息：{msg}"
     # 其他类型实例仅校验库权限
     else:
-        # 先获取查询语句涉及的库，redis、mssql、pgsql特殊处理，仅校验当前选择的库
-        if instance.db_type in ["redis", "mssql", "pgsql"]:
+        # 先获取查询语句涉及的库，redis、mssql特殊处理，仅校验当前选择的库
+        if instance.db_type in ["redis", "mssql"]:
             dbs = [db_name]
         else:
             dbs = [

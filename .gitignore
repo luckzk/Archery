@@ -10,6 +10,7 @@ archery/settings.py.dev
 archery/settings_dev.py
 sql/migrations/
 venv
+.venv/
 env
 sonar-project.properties
 .scannerwork
@@ -19,5 +20,16 @@ src/docker-compose-dev
 .coverage
 archery_custom
 static/
+!common/static/
+common/static/*
+!common/static/dbdiagnostic/
+common/static/dbdiagnostic/*
+!common/static/dbdiagnostic/js/
+common/static/dbdiagnostic/js/*
+!common/static/dbdiagnostic/js/*.js
+!common/static/sqlquery/
+common/static/sqlquery/*
+!common/static/sqlquery/*.css
+!common/static/sqlquery/*.js
 local_settings.py
 nohup.out

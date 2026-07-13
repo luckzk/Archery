@@ -1,0 +1,283 @@
+{% extends "base.html" %}
+
+{% block content %}
+{% include "pgsql_migration/styles.html" %}
+<div class="pgsql-migration-page">
+    <div class="page-head">
+        <div>
+            <h3><i class="fa fa-exchange"></i> PgSQL 手动迁移助手</h3>
+            <small>迁移准备任务、表范围选择、序列和数据检查</small>
+        </div>
+        <div class="page-actions">
+            <button id="btn-create-task" type="button" class="btn btn-success" onclick="createTask()"><i class="fa fa-plus"></i>创建任务</button>
+        </div>
+    </div>
+
+    <div class="migration-panel">
+        <div class="migration-panel-heading">
+            <h4 class="migration-panel-title">创建迁移准备任务</h4>
+            <span class="migration-panel-meta">源库和目标库必须是可见的 PostgreSQL 实例</span>
+        </div>
+        <div class="migration-panel-body">
+            <div class="task-form-grid">
+                <div>
+                    <label class="field-label" for="task_name">任务名称</label>
+                    <input id="task_name" class="form-control" placeholder="任务名称">
+                </div>
+                <div>
+                    <label class="field-label" for="source_instance_id">源库</label>
+                    <select id="source_instance_id" class="form-control selectpicker" data-live-search="true" title="源库">
+                        {% for ins in instances %}<option value="{{ ins.id }}">{{ ins.instance_name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label" for="target_instance_id">目标库</label>
+                    <select id="target_instance_id" class="form-control selectpicker" data-live-search="true" title="目标库">
+                        {% for ins in instances %}<option value="{{ ins.id }}">{{ ins.instance_name }}</option>{% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label class="field-label" for="task_schemas">Schema</label>
+                    <input id="task_schemas" class="form-control" placeholder="public,audit">
+                </div>
+                <div>
+                    <label class="field-label" for="task_tables">表范围</label>
+                    <input id="task_tables" class="form-control" placeholder="public.t1,public.t2">
+                </div>
+            </div>
+            <div class="create-action-row">
+                <input id="task_description" class="form-control description-field" placeholder="备注">
+                <button id="btn-load-source-tables" type="button" class="btn btn-default" onclick="loadInstanceTables('source')"><i class="fa fa-download"></i>加载源库表</button>
+                <button id="btn-load-target-tables" type="button" class="btn btn-default" onclick="loadInstanceTables('target')"><i class="fa fa-download"></i>加载目标库表</button>
+                <button type="button" class="btn btn-info" onclick="fillTablesFromSelection('source')"><i class="fa fa-check-square-o"></i>使用源库选中表</button>
+                <button type="button" class="btn btn-info" onclick="fillTablesFromSelection('target')"><i class="fa fa-check-square-o"></i>使用目标库选中表</button>
+            </div>
+            <div class="table-picker-grid">
+                <div class="table-picker-column">
+                    <div class="table-picker-heading">
+                        <h5><i class="fa fa-database"></i> 源库表</h5>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="source-table-list" data-toggle="table" class="table table-striped table-hover"></table>
+                    </div>
+                </div>
+                <div class="table-picker-column">
+                    <div class="table-picker-heading">
+                        <h5><i class="fa fa-database"></i> 目标库表</h5>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="target-table-list" data-toggle="table" class="table table-striped table-hover"></table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="migration-panel">
+        <div class="migration-panel-heading">
+            <h4 class="migration-panel-title">迁移准备任务</h4>
+            <span class="migration-panel-meta">点击操作进入任务详情页</span>
+        </div>
+        <div class="migration-panel-body migration-table-wrap">
+            <table id="task-list" data-toggle="table" class="table table-striped table-hover"></table>
+        </div>
+    </div>
+</div>
+<div id="migration-page-notice" class="migration-page-notice" role="status" aria-live="polite"></div>
+<div id="migration-confirm" class="migration-confirm" style="display:none" role="dialog" aria-modal="true" aria-labelledby="migration-confirm-message">
+    <div class="migration-confirm-box">
+        <div class="migration-confirm-message" id="migration-confirm-message"></div>
+        <div class="migration-confirm-actions">
+            <button type="button" class="btn btn-default btn-sm js-confirm-cancel">取消</button>
+            <button type="button" class="btn btn-primary btn-sm js-confirm-ok">确认</button>
+        </div>
+    </div>
+</div>
+{% endblock content %}
+
+{% block js %}
+<script>
+var migrationConfirmLastFocus = null;
+
+function escapeHtml(value) {
+    return String(value == null ? '' : value).replace(/[&<>"'`=\/]/g, function(char) {
+        return {
+            '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
+            '`': '&#x60;', '=': '&#x3D;', '/': '&#x2F;'
+        }[char];
+    });
+}
+function showMigrationNotice(message, type) {
+    var notice = $('#migration-page-notice');
+    notice.attr({
+        role: type === 'error' ? 'alert' : 'status',
+        'aria-live': type === 'error' ? 'assertive' : 'polite'
+    });
+    notice.removeClass('is-error is-success')
+        .addClass(type === 'error' ? 'is-error' : 'is-success')
+        .text(message || '')
+        .stop(true, true)
+        .fadeIn(120)
+        .delay(1800)
+        .fadeOut(180);
+}
+function migrationConfirm(message, onConfirm) {
+    var confirmBox = $('#migration-confirm');
+    migrationConfirmLastFocus = document.activeElement;
+    confirmBox.find('.migration-confirm-message').text(message || '');
+    confirmBox.show();
+    confirmBox.find('.js-confirm-ok').focus();
+    confirmBox.off('keydown.migrationConfirm').on('keydown.migrationConfirm', function(event) {
+        if (event.key === 'Escape') {
+            closeMigrationConfirm();
+        }
+    });
+    confirmBox.find('.js-confirm-cancel').off('click').on('click', function() {
+        closeMigrationConfirm();
+    });
+    confirmBox.find('.js-confirm-ok').off('click').on('click', function() {
+        closeMigrationConfirm();
+        if (typeof onConfirm === 'function') onConfirm();
+    });
+}
+function closeMigrationConfirm() {
+    $('#migration-confirm').hide().off('keydown.migrationConfirm');
+    if (migrationConfirmLastFocus && migrationConfirmLastFocus.focus) {
+        migrationConfirmLastFocus.focus();
+    }
+}
+function setMigrationButtonLoading(selector, loading, label) {
+    var button = $(selector);
+    if (!button.length) return;
+    if (loading) {
+        if (!button.data('original-html')) {
+            button.data('original-html', button.html());
+        }
+        button.prop('disabled', true).addClass('is-loading')
+            .html('<i class="fa fa-spinner fa-spin"></i>' + escapeHtml(label || '处理中'));
+        return;
+    }
+    button.prop('disabled', false).removeClass('is-loading');
+    if (button.data('original-html')) {
+        button.html(button.data('original-html'));
+    }
+}
+function statusFormatter(value) {
+    const map = {draft: '草稿', checking: '检查中', sequence_previewed: '已预览序列', sequence_applied: '已设置序列', data_checked: '已完成数据检查', failed: '失败'};
+    const typeMap = {draft: 'is-muted', checking: 'is-running', sequence_previewed: 'is-info', sequence_applied: 'is-success', data_checked: 'is-success', failed: 'is-error'};
+    return '<span class="status-pill ' + escapeHtml(typeMap[value] || 'is-muted') + '">' + escapeHtml(map[value] || value) + '</span>';
+}
+function tableNameFormatter(value, row) { return escapeHtml(row.schema_name + '.' + row.table_name); }
+function renderInstanceTables(kind, rows) {
+    $('#' + kind + '-table-list').bootstrapTable('destroy').bootstrapTable({
+        data: rows,
+        search: true,
+        pagination: true,
+        pageSize: 8,
+        undefinedText: '-',
+        locale: 'zh-CN',
+        formatNoMatches: function() { return '没有匹配的表'; },
+        columns: [
+            {field: 'state', checkbox: true},
+            {field: 'qualified_name', title: '表', formatter: tableNameFormatter},
+            {field: 'estimated_rows', title: '估算行数'},
+            {field: 'replica_identity', title: 'Replica Identity', escape: true},
+            {field: 'primary_key_index', title: '主键', escape: true}
+        ]
+    });
+}
+function loadInstanceTables(kind) {
+    var instanceId = kind === 'source' ? $('#source_instance_id').val() : $('#target_instance_id').val();
+    if (!instanceId) { showMigrationNotice(kind === 'source' ? '请先选择源库' : '请先选择目标库', 'error'); return; }
+    var buttonSelector = kind === 'source' ? '#btn-load-source-tables' : '#btn-load-target-tables';
+    setMigrationButtonLoading(buttonSelector, true, '加载中');
+    $.get('/pgsql_migration/instances/tables/', {
+        instance_id: instanceId,
+        schemas: $('#task_schemas').val()
+    }, function(data) {
+        if (data.status !== 0) { showMigrationNotice(data.msg, 'error'); return; }
+        renderInstanceTables(kind, data.rows);
+        showMigrationNotice((kind === 'source' ? '源库' : '目标库') + '表已加载，共 ' + data.rows.length + ' 张');
+    }).fail(function(xhr, textStatus, errorThrown) {
+        showMigrationNotice(errorThrown || textStatus || '表加载失败', 'error');
+    }).always(function() {
+        setMigrationButtonLoading(buttonSelector, false);
+    });
+}
+function selectedTables(kind) {
+    return $('#' + kind + '-table-list').bootstrapTable('getSelections').map(function(row) {
+        return row.schema_name + '.' + row.table_name;
+    });
+}
+function fillTablesFromSelection(kind) {
+    var tables = selectedTables(kind);
+    if (!tables.length) { showMigrationNotice('请先勾选表', 'error'); return; }
+    $('#task_tables').val(tables.join(','));
+}
+function taskOperateFormatter(value, row) {
+    var buttons = '<a class="btn btn-xs btn-info" href="/pgsql_migration/tasks/' + row.id + '/"><i class="fa fa-external-link"></i>操作</a>';
+    if (row.can_delete) {
+        buttons += ' <button type="button" class="btn btn-xs btn-danger js-delete-task" onclick="deleteTask(' + row.id + ', this)"><i class="fa fa-trash"></i>删除</button>';
+    }
+    return buttons;
+}
+function loadTasks() {
+    $('#task-list').bootstrapTable('destroy').bootstrapTable({
+        url: '/pgsql_migration/tasks/', method: 'get', sidePagination: 'server', pagination: true, search: true,
+        undefinedText: '-',
+        locale: 'zh-CN',
+        formatNoMatches: function() { return '暂无迁移准备任务'; },
+        columns: [
+            {field: 'id', title: 'ID'}, {field: 'name', title: '任务', escape: true},
+            {field: 'source_instance_name', title: '源库', escape: true}, {field: 'target_instance_name', title: '目标库', escape: true},
+            {field: 'status', title: '状态', formatter: statusFormatter}, {field: 'user_display', title: '创建人', escape: true},
+            {field: 'create_time', title: '创建时间', escape: true}, {field: 'operate', title: '操作', formatter: taskOperateFormatter}
+        ]
+    });
+}
+function createTask() {
+    setMigrationButtonLoading('#btn-create-task', true, '创建中');
+    $.post('/pgsql_migration/tasks/create/', {
+        name: $('#task_name').val(), source_instance_id: $('#source_instance_id').val(), target_instance_id: $('#target_instance_id').val(),
+        schemas: $('#task_schemas').val(), tables: $('#task_tables').val(), description: $('#task_description').val()
+    }, function(data) {
+        if (data.status === 0) {
+            $('#task-list').bootstrapTable('refresh');
+            showMigrationNotice('任务已创建');
+        } else {
+            showMigrationNotice(data.msg, 'error');
+        }
+    }).fail(function(xhr, textStatus, errorThrown) {
+        showMigrationNotice(errorThrown || textStatus || '任务创建失败', 'error');
+    }).always(function() {
+        setMigrationButtonLoading('#btn-create-task', false);
+    });
+}
+function deleteTask(taskId, button) {
+    migrationConfirm('确认删除任务？删除后该迁移准备任务及其检查结果不可继续操作。', function() {
+        setMigrationButtonLoading(button, true, '删除中');
+        $.post('/pgsql_migration/tasks/delete/', {task_id: taskId}, function(data) {
+            if (data.status === 0) {
+                $('#task-list').bootstrapTable('refresh');
+                showMigrationNotice('任务已删除');
+            } else {
+                showMigrationNotice(data.msg, 'error');
+            }
+        }).fail(function(xhr, textStatus, errorThrown) {
+            showMigrationNotice(errorThrown || textStatus || '任务删除失败', 'error');
+        }).always(function() {
+            setMigrationButtonLoading(button, false);
+        });
+    });
+}
+$(function() {
+    loadTasks();
+    $('#source_instance_id').on('changed.bs.select change', function() {
+        $('#source-table-list').bootstrapTable('destroy');
+    });
+    $('#target_instance_id').on('changed.bs.select change', function() {
+        $('#target-table-list').bootstrapTable('destroy');
+    });
+});
+</script>
+{% endblock js %}

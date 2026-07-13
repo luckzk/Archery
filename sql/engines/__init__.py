@@ -135,6 +135,18 @@ class EngineBase:
         """获取表格索引信息"""
         return dict()
 
+    def get_table_overview_data(self, db_name, tb_name, **kwargs):
+        """获取表概要信息"""
+        return dict()
+
+    def get_table_constraint_data(self, db_name, tb_name, **kwargs):
+        """获取表约束信息"""
+        return dict()
+
+    def get_table_partition_data(self, db_name, tb_name, **kwargs):
+        """获取表分区信息"""
+        return dict()
+
     def get_tables_metas_data(self, db_name, **kwargs):
         """获取数据库所有表格信息，用作数据字典导出接口"""
         return list()
@@ -145,6 +157,26 @@ class EngineBase:
 
     def get_view_detail(self, db_name, view_name, **kwargs):
         """获取视图详情, 返回 dict"""
+        return dict()
+
+    def get_materialized_views_list(self, db_name, **kwargs):
+        """获取物化视图列表, 返回 dict"""
+        return dict()
+
+    def get_materialized_view_detail(self, db_name, matview_name, **kwargs):
+        """获取物化视图详情, 返回 dict"""
+        return dict()
+
+    def get_sequences_list(self, db_name, **kwargs):
+        """获取序列列表, 返回 dict"""
+        return dict()
+
+    def get_sequence_detail(self, db_name, sequence_name, **kwargs):
+        """获取序列详情, 返回 dict"""
+        return dict()
+
+    def get_blocking_chain(self, db_name, **kwargs):
+        """获取锁等待和阻塞链信息"""
         return dict()
 
     def get_triggers_list(self, db_name, **kwargs):

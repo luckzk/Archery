@@ -12,6 +12,7 @@ from sql.models import (
     WorkflowLog,
     QueryPrivilegesApply,
     ArchiveConfig,
+    PgSQLMetricDefinition,
 )
 from django.contrib.auth.models import Group
 from django.contrib.auth.password_validation import validate_password
@@ -615,3 +616,19 @@ class ExecuteWorkflowSerializer(serializers.Serializer):
             raise serializers.ValidationError({"errors": "不存在该工单"})
 
         return attrs
+
+
+class PgSQLMetricDefinitionSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = PgSQLMetricDefinition
+        fields = (
+            "id",
+            "metric_key",
+            "metric_name",
+            "description",
+            "sql",
+            "db_name",
+            "value_column",
+            "enabled",
+            "timeout_ms",
+        )

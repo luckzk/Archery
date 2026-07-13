@@ -74,7 +74,7 @@ def create_kill_session(request):
         return HttpResponse(json.dumps(result), content_type="application/json")
     # 返回查询结果
     return HttpResponse(
-        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        json.dumps(result, cls=ExtendJSONEncoder),
         content_type="application/json",
     )
 
@@ -102,6 +102,8 @@ def kill_session(request):
         r = engine.kill_session(json.loads(thread_ids))
     elif instance.db_type == "tdengine":
         r = engine.kill_query(json.loads(thread_ids))
+    elif instance.db_type == "pgsql":
+        r = engine.kill(json.loads(thread_ids))
     else:
         result = {
             "status": 1,
@@ -114,7 +116,39 @@ def kill_session(request):
         result = {"status": 1, "msg": r.error, "data": []}
     # 返回查询结果
     return HttpResponse(
-        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--取消正在执行的查询
+@permission_required("sql.process_kill", raise_exception=True)
+def cancel_session(request):
+    instance_name = request.POST.get("instance_name")
+    thread_ids = request.POST.get("ThreadIDs")
+    result = {"status": 0, "msg": "ok", "data": []}
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库取消查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    engine = get_engine(instance=instance)
+    r = engine.cancel_backend(json.loads(thread_ids))
+
+    if r and r.error:
+        result = {"status": 1, "msg": r.error, "data": []}
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
         content_type="application/json",
     )
 
@@ -125,6 +159,8 @@ def tablespace(request):
     instance_name = request.POST.get("instance_name")
     offset = int(request.POST.get("offset", 0))
     limit = int(request.POST.get("limit", 14))
+    db_name = request.POST.get("db_name", "")
+    schema_name = request.POST.get("schema_name", "")
     try:
         instance = user_instances(request.user).get(instance_name=instance_name)
     except Instance.DoesNotExist:
@@ -133,7 +169,12 @@ def tablespace(request):
 
     query_engine = get_engine(instance=instance)
     try:
-        query_result = query_engine.tablespace(offset, limit)
+        if instance.db_type == "pgsql":
+            query_result = query_engine.tablespace(
+                offset, limit, db_name=db_name, schema_name=schema_name
+            )
+        else:
+            query_result = query_engine.tablespace(offset, limit)
     except AttributeError:
         result = {
             "status": 1,
@@ -145,14 +186,66 @@ def tablespace(request):
     if query_result:
         if not query_result.error:
             table_space = query_result.to_dict()
-            r = query_engine.tablespace_count()
+            if instance.db_type == "pgsql":
+                r = query_engine.tablespace_count(
+                    db_name=db_name, schema_name=schema_name
+                )
+            else:
+                r = query_engine.tablespace_count()
+            if r.error:
+                result = {"status": 1, "msg": r.error}
+                return HttpResponse(json.dumps(result), content_type="application/json")
             total = r.rows[0][0]
             result = {"status": 0, "msg": "ok", "rows": table_space, "total": total}
         else:
             result = {"status": 1, "msg": query_result.error}
     # 返回查询结果
     return HttpResponse(
-        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL Top表空间过滤项
+@permission_required("sql.tablespace_view", raise_exception=True)
+def pgsql_tablespace_filters(request):
+    instance_name = request.GET.get("instance_name")
+    db_name = request.GET.get("db_name", "")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": {}}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的PgSQL表空间过滤项".format(instance.db_type),
+            "data": {},
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    result = {"status": 0, "msg": "ok", "data": {"databases": [], "schemas": []}}
+    try:
+        database_result = query_engine.get_all_databases()
+        if database_result.error:
+            result = {"status": 1, "msg": database_result.error, "data": {}}
+        else:
+            result["data"]["databases"] = database_result.rows
+            selected_db = db_name or query_engine.db_name or "postgres"
+            schema_result = query_engine.get_all_schemas(db_name=selected_db)
+            if schema_result.error:
+                result = {"status": 1, "msg": schema_result.error, "data": result["data"]}
+            else:
+                result["data"]["selected_db"] = selected_db
+                result["data"]["schemas"] = schema_result.rows
+    finally:
+        query_engine.close()
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
         content_type="application/json",
     )
 
@@ -170,6 +263,8 @@ def trxandlocks(request):
 
     query_engine = get_engine(instance=instance)
     if instance.db_type == "mysql":
+        query_result = query_engine.trxandlocks()
+    elif instance.db_type == "pgsql":
         query_result = query_engine.trxandlocks()
     elif instance.db_type == "oracle":
         query_result = query_engine.lock_info()
@@ -189,7 +284,324 @@ def trxandlocks(request):
 
     # 返回查询结果
     return HttpResponse(
-        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL发布订阅
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pubsub(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的发布订阅查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.pubsub()
+
+    if not query_result.error:
+        pubsub = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": pubsub}
+    else:
+        result = {"status": 1, "msg": query_result.error}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL复制状态
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_replication(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的复制状态查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.replication_status()
+
+    if not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    else:
+        result = {"status": 1, "msg": query_result.error}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL复制Slot
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_replication_slots(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的复制Slot查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.replication_slots()
+
+    if not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    else:
+        result = {"status": 1, "msg": query_result.error}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL Vacuum风险
+@permission_required("sql.tablespace_view", raise_exception=True)
+def pgsql_vacuum(request):
+    instance_name = request.POST.get("instance_name")
+    offset = int(request.POST.get("offset", 0))
+    limit = int(request.POST.get("limit", 30))
+    db_name = request.POST.get("db_name", "")
+    schema_name = request.POST.get("schema_name", "")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的Vacuum风险查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.vacuum_risk(
+        offset=offset, row_count=limit, db_name=db_name, schema_name=schema_name
+    )
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        count_result = query_engine.vacuum_risk_count(
+            db_name=db_name, schema_name=schema_name
+        )
+        if count_result.error:
+            result = {"status": 1, "msg": count_result.error}
+        else:
+            result = {
+                "status": 0,
+                "msg": "ok",
+                "rows": rows,
+                "total": count_result.rows[0][0],
+            }
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "Vacuum风险查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL Progress进度
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_progress(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的Progress进度查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.progress_status()
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "Progress进度查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL等待事件聚合
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_wait_events(request):
+    instance_name = request.POST.get("instance_name")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的等待事件聚合查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.wait_event_summary()
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "等待事件聚合查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL索引诊断
+@permission_required("sql.tablespace_view", raise_exception=True)
+def pgsql_indexes(request):
+    instance_name = request.POST.get("instance_name")
+    offset = int(request.POST.get("offset", 0))
+    limit = int(request.POST.get("limit", 30))
+    db_name = request.POST.get("db_name", "")
+    schema_name = request.POST.get("schema_name", "")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的索引诊断查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.index_diagnostic(
+        offset=offset, row_count=limit, db_name=db_name, schema_name=schema_name
+    )
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        count_result = query_engine.index_diagnostic_count(
+            db_name=db_name, schema_name=schema_name
+        )
+        if count_result.error:
+            result = {"status": 1, "msg": count_result.error}
+        else:
+            result = {
+                "status": 0,
+                "msg": "ok",
+                "rows": rows,
+                "total": count_result.rows[0][0],
+            }
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "索引诊断查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
+        content_type="application/json",
+    )
+
+
+# 问题诊断--PgSQL插件展示
+@permission_required("sql.trxandlocks_view", raise_exception=True)
+def pgsql_extensions(request):
+    instance_name = request.POST.get("instance_name")
+    db_name = request.POST.get("db_name", "")
+
+    try:
+        instance = user_instances(request.user).get(instance_name=instance_name)
+    except Instance.DoesNotExist:
+        result = {"status": 1, "msg": "你所在组未关联该实例", "data": []}
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    if instance.db_type != "pgsql":
+        result = {
+            "status": 1,
+            "msg": "暂时不支持{}类型数据库的插件展示查询".format(instance.db_type),
+            "data": [],
+        }
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    query_engine = get_engine(instance=instance)
+    query_result = query_engine.extension_status(db_name=db_name)
+
+    if query_result and not query_result.error:
+        rows = query_result.to_dict()
+        result = {"status": 0, "msg": "ok", "rows": rows}
+    elif query_result:
+        result = {"status": 1, "msg": query_result.error}
+    else:
+        result = {"status": 1, "msg": "插件展示查询无返回结果"}
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder),
         content_type="application/json",
     )
 
@@ -224,6 +636,6 @@ def innodb_trx(request):
 
     # 返回查询结果
     return HttpResponse(
-        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        json.dumps(result, cls=ExtendJSONEncoder),
         content_type="application/json",
     )

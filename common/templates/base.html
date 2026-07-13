@@ -19,6 +19,7 @@
     <link href="{% static 'bootstrap-table/css/bootstrap-table.min.css' %}" rel="stylesheet">
     <link href="{% static 'bootstrap-switch/css/bootstrap-switch.min.css' %}" rel="stylesheet">
     <link href="{% static 'notice/css/notice.css' %}" rel="stylesheet">
+    <link href="{% static 'layout/archery-nav-themes.css' %}" rel="stylesheet">
     <style type="text/css">
     table{
         max-width: none !important;      /*解决 ios 横向滚动失效*/
@@ -47,6 +48,15 @@
         <ul class="nav navbar-top-links navbar-right">
             <li>
                 <a>你好，{{ user }}</a>
+            </li>
+            <li class="dropdown nav-theme-switcher">
+                <a class="dropdown-toggle" data-toggle="dropdown" href="#" aria-label="切换导航主题">
+                    <i class="fa fa-paint-brush fa-fw"></i> <span id="nav-theme-label">经典</span> <i class="fa fa-caret-down"></i>
+                </a>
+                <ul class="dropdown-menu dropdown-user dropdown-menu-right">
+                    <li><a href="javascript:;" data-nav-theme="classic"><i class="fa fa-check fa-fw nav-theme-check"></i> 经典菜单</a></li>
+                    <li><a href="javascript:;" data-nav-theme="layered"><i class="fa fa-check fa-fw nav-theme-check"></i> 维度分层</a></li>
+                </ul>
             </li>
             {% if todo > 0 %}
                 <li>
@@ -96,6 +106,7 @@
                     {% if perms.sql.menu_dashboard %}
                         <li>
                             <a href="/dashboard/"><i class="fa fa-dashboard fa-fw"></i> Dashboard</a>
+                            <a href="/dashboard/pgsql_metrics/"><i class="fa fa-heartbeat fa-fw"></i> PostgreSQL状态</a>
                         </li>
                     {% endif %}
                     {% if perms.sql.menu_sqlcheck %}
@@ -197,25 +208,15 @@
                             <!-- /.nav-second-level -->
                         </li>
                     {% endif %}
-                    {% if perms.sql.menu_tools %}
+                    {% if perms.sql.menu_tools and tool_plugins %}
                         <li>
                             <a href="#"><i class="fa fa-plug fa-fw"></i> 工具插件<span class="fa arrow"></span></a>
                             <ul class="nav nav-second-level collapse">
-                                {% if perms.sql.menu_archive %}
+                                {% for plugin in tool_plugins %}
                                     <li>
-                                        <a href="/archive/">PTArchiver</a>
+                                        <a href="{{ plugin.url }}" title="{{ plugin.description }}">{{ plugin.name }}</a>
                                     </li>
-                                {% endif %}
-                                {% if perms.sql.menu_my2sql %}
-                                    <li>
-                                        <a href="/my2sql/">My2SQL</a>
-                                    </li>
-                                {% endif %}
-                                {% if perms.sql.menu_schemasync %}
-                                    <li>
-                                        <a href="/schemasync/">SchemaSync</a>
-                                    </li>
-                                {% endif %}
+                                {% endfor %}
                             </ul>
                             <!-- /.nav-second-level -->
                         </li>
@@ -418,6 +419,7 @@
 <script src="{% static 'dist/js/formatter.js' %}"></script>
 <script src="{% static 'dist/js/utils.js' %}"></script>
 <script src="{% static 'watermark/shuiyin.js' %}"></script>
+<script src="{% static 'layout/archery-nav-themes.js' %}"></script>
 <script type="text/javascript">
     var now = getNow();
     var user = '{{ user.display }}{{ user.date_joined|date:"Hdi" }}';

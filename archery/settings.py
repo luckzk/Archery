@@ -79,6 +79,15 @@ env = environ.Env(
             "sql.notify:GenericWebhookNotifier",
         ],
     ),
+    ENABLED_TOOL_PLUGINS=(
+        list,
+        [
+            "archive",
+            "pgsql_migration",
+            "my2sql",
+            "schemasync",
+        ],
+    ),
     CURRENT_AUDITOR=(str, "sql.utils.workflow_audit:AuditV2"),
     PASSWORD_MIXIN_PATH=(str, "sql.plugins.password:DummyMixin"),
 )
@@ -122,6 +131,8 @@ AVAILABLE_ENGINES = {
 ENABLED_NOTIFIERS = env("ENABLED_NOTIFIERS")
 
 ENABLED_ENGINES = env("ENABLED_ENGINES")
+
+ENABLED_TOOL_PLUGINS = env("ENABLED_TOOL_PLUGINS")
 
 CURRENT_AUDITOR = env("CURRENT_AUDITOR")
 

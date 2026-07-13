@@ -40,8 +40,12 @@ from sql.utils.sql_review import (
     can_view,
     can_rollback,
 )
+from sql.tool_plugins import tool_plugin_enabled_required
 from common.utils.const import Const, WorkflowType, WorkflowAction
 from sql.utils.resource_group import user_groups, user_instances
+from sql.utils.sqlquery_favorite import favorite_rows_for_template
+from sql.utils.sqlquery_knowledge import SQLQUERY_KNOWLEDGE_ENGINES
+from sql.utils.sqlquery_preference import get_sqlquery_preference
 
 import logging
 
@@ -376,9 +380,7 @@ def sqlquery(request):
     group_list = user_groups(user)
     storage_type = SysConfig().get("storage_type")
 
-    favorites = QueryLog.objects.filter(username=user.username, favorite=True).values(
-        "id", "alias"
-    )
+    favorites = favorite_rows_for_template(user)
     can_download = 1 if user.has_perm("sql.query_download") or user.is_superuser else 0
     can_offline_download = user.has_perm("sql.offline_download") or user.is_superuser
     context = {
@@ -386,6 +388,8 @@ def sqlquery(request):
         "can_download": can_download,
         "engines": engine_map,
         "group_list": group_list,
+        "knowledge_engines": SQLQUERY_KNOWLEDGE_ENGINES,
+        "sqlquery_preference": get_sqlquery_preference(user),
         "storage_type": storage_type,
         "can_offline_download": can_offline_download,
     }
@@ -511,18 +515,21 @@ def instance_param(request):
     return render(request, "param.html")
 
 
+@tool_plugin_enabled_required("my2sql")
 @permission_required("sql.menu_my2sql", raise_exception=True)
 def my2sql(request):
     """my2sql页面"""
     return render(request, "my2sql.html")
 
 
+@tool_plugin_enabled_required("schemasync")
 @permission_required("sql.menu_schemasync", raise_exception=True)
 def schemasync(request):
     """数据库差异对比页面"""
     return render(request, "schemasync.html")
 
 
+@tool_plugin_enabled_required("archive")
 @permission_required("sql.menu_archive", raise_exception=True)
 def archive(request):
     """归档列表页面"""
@@ -536,6 +543,7 @@ def archive(request):
     )
 
 
+@tool_plugin_enabled_required("archive")
 def archive_detail(request, id):
     """归档详情页面"""
     archive_config = ArchiveConfig.objects.get(pk=id)
@@ -681,9 +689,7 @@ def audit(request):
 def audit_sqlquery(request):
     """SQL在线查询页面审计"""
     user = request.user
-    favorites = QueryLog.objects.filter(username=user.username, favorite=True).values(
-        "id", "alias"
-    )
+    favorites = favorite_rows_for_template(user, fields=("id", "alias", "sql"))
     return render(request, "audit_sqlquery.html", {"favorites": favorites})
 
 
@@ -740,9 +746,7 @@ def sqlexportsubmit(request):
     max_export_rows = SysConfig().get("max_export_rows")
     max_export_rows = int(max_export_rows) if max_export_rows else 10000
 
-    favorites = QueryLog.objects.filter(username=user.username, favorite=True).values(
-        "id", "alias"
-    )
+    favorites = favorite_rows_for_template(user, fields=("id", "alias", "sql"))
     can_download = user.has_perm("sql.query_download") or user.is_superuser
     can_offline_download = user.has_perm("sql.offline_download") or user.is_superuser
     context = {

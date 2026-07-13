@@ -16,11 +16,92 @@ from common.utils.openai import OpenaiClient, check_openai_config
 from common.utils.timer import FuncTimer
 from sql.query_privileges import query_priv_check
 from sql.utils.resource_group import user_instances
+from sql.utils.sqlquery_favorite import (
+    SQLQUERY_KNOWLEDGE_ALIAS,
+    favorite_by_source_query_log_id,
+    favorite_rows_for_user,
+    migrate_legacy_favorites,
+)
+from sql.utils.sqlquery_knowledge import SQLQUERY_KNOWLEDGE_ENGINES
+from sql.utils.sqlquery_preference import (
+    get_sqlquery_preference,
+    update_sqlquery_preference,
+)
 from sql.utils.tasks import add_kill_conn_schedule, del_schedule
-from .models import QueryLog, Instance
+from .models import QueryLog, Instance, SqlQueryKnowledge, SqlQueryFavorite
 from sql.engines import get_engine
 
 logger = logging.getLogger("default")
+
+
+def _normalize_knowledge_engines(engine_values):
+    if not isinstance(engine_values, (list, tuple)):
+        engine_values = [engine_values]
+
+    valid_engines = set(SQLQUERY_KNOWLEDGE_ENGINES)
+    engines = []
+    for value in engine_values:
+        for engine in str(value or "").split(","):
+            engine = engine.strip()
+            if engine in valid_engines and engine not in engines:
+                engines.append(engine)
+    return engines or ["通用"]
+
+
+def _knowledge_item_from_log(query_log):
+    try:
+        payload = json.loads(query_log.sqllog)
+    except (TypeError, ValueError):
+        payload = {}
+
+    sql = payload.get("sql") or query_log.sqllog
+    return {
+        "id": query_log.id,
+        "name": payload.get("name") or "未命名",
+        "scene": payload.get("scene") or "自定义",
+        "engines": _normalize_knowledge_engines(payload.get("engines", [])),
+        "sql": sql,
+        "create_time": query_log.create_time,
+        "sys_time": query_log.sys_time,
+    }
+
+
+def _knowledge_item_from_model(knowledge):
+    return {
+        "id": knowledge.id,
+        "name": knowledge.name,
+        "scene": knowledge.scene or "自定义",
+        "engines": _normalize_knowledge_engines(knowledge.engines),
+        "sql": knowledge.sql,
+        "instance_name": knowledge.instance_name,
+        "db_name": knowledge.db_name,
+        "create_time": knowledge.create_time,
+        "sys_time": knowledge.sys_time,
+    }
+
+
+def _migrate_legacy_knowledge(user):
+    legacy_logs = QueryLog.objects.filter(
+        username=user.username, alias=SQLQUERY_KNOWLEDGE_ALIAS
+    )
+    for legacy_log in legacy_logs:
+        legacy_item = _knowledge_item_from_log(legacy_log)
+        if SqlQueryKnowledge.objects.filter(
+            username=user.username,
+            name=legacy_item["name"],
+            sql=legacy_item["sql"],
+        ).exists():
+            continue
+        SqlQueryKnowledge.objects.create(
+            username=user.username,
+            user_display=user.display,
+            name=legacy_item["name"][:64],
+            scene=legacy_item["scene"][:64],
+            engines=",".join(legacy_item["engines"]),
+            sql=legacy_item["sql"],
+            instance_name=legacy_log.instance_name,
+            db_name=legacy_log.db_name,
+        )
 
 
 @permission_required("sql.query_submit", raise_exception=True)
@@ -71,7 +152,7 @@ def query(request):
 
         # 查询权限校验，并且获取limit_num
         priv_check_info = query_priv_check(
-            user, instance, db_name, sql_content, limit_num
+            user, instance, db_name, sql_content, limit_num, schema_name=schema_name
         )
         if priv_check_info["status"] == 0:
             limit_num = priv_check_info["data"]["limit_num"]
@@ -210,6 +291,50 @@ def query(request):
 
 
 @permission_required("sql.menu_sqlquery", raise_exception=True)
+def pgsql_blocking_chain(request):
+    """SQLQuery 获取 PostgreSQL 锁等待/阻塞链"""
+    instance_name = request.POST.get("instance_name")
+    db_name = request.POST.get("db_name")
+    result = {"status": 0, "msg": "ok", "data": {}}
+
+    if not instance_name or not db_name:
+        result["status"] = 1
+        result["msg"] = "页面提交参数可能为空"
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    try:
+        instance = user_instances(request.user, db_type=["pgsql"]).get(
+            instance_name=instance_name
+        )
+    except Instance.DoesNotExist:
+        result["status"] = 1
+        result["msg"] = "你所在组未关联该PgSQL实例"
+        return HttpResponse(json.dumps(result), content_type="application/json")
+
+    try:
+        query_engine = get_engine(instance=instance)
+        db_name = query_engine.escape_string(db_name)
+        query_result = query_engine.get_blocking_chain(db_name=db_name)
+        if query_result.error:
+            result["status"] = 1
+            result["msg"] = query_result.error
+        else:
+            query_result.query_time = "-"
+            query_result.mask_time = "-"
+            query_result.full_sql = "PgSQL 锁等待 / 阻塞链诊断"
+            result["data"] = query_result.__dict__
+    except Exception as msg:
+        logger.error(traceback.format_exc())
+        result["status"] = 1
+        result["msg"] = str(msg)
+
+    return HttpResponse(
+        json.dumps(result, cls=ExtendJSONEncoder, bigint_as_string=True),
+        content_type="application/json",
+    )
+
+
+@permission_required("sql.menu_sqlquery", raise_exception=True)
 def querylog(request):
     return _querylog(request)
 
@@ -237,12 +362,13 @@ def _querylog(request):
     search = request.GET.get("search", "")
     start_date = request.GET.get("start_date", "")
     end_date = request.GET.get("end_date", "")
+    source_favorites = favorite_by_source_query_log_id(user)
 
     # 组合筛选项
     filter_dict = dict()
     # 是否收藏
     if star:
-        filter_dict["favorite"] = star
+        filter_dict["id__in"] = list(source_favorites.keys())
     # 语句别名
     if query_log_id:
         filter_dict["id"] = query_log_id
@@ -258,7 +384,9 @@ def _querylog(request):
         filter_dict["create_time__range"] = (start_date, end_date)
 
     # 过滤组合筛选项
-    sql_log = QueryLog.objects.filter(**filter_dict)
+    sql_log = QueryLog.objects.filter(**filter_dict).exclude(
+        alias=SQLQUERY_KNOWLEDGE_ALIAS
+    )
 
     # 过滤搜索信息
     sql_log = sql_log.filter(
@@ -281,7 +409,14 @@ def _querylog(request):
         "create_time",
     )
     # QuerySet 序列化
-    rows = [row for row in sql_log_list]
+    rows = []
+    for row in sql_log_list:
+        favorite = source_favorites.get(row["id"])
+        row["favorite"] = bool(favorite)
+        if favorite:
+            row["favorite_id"] = favorite.id
+            row["alias"] = favorite.alias
+        rows.append(row)
     result = {"total": sql_log_count, "rows": rows}
     # 返回查询结果
     return HttpResponse(
@@ -297,15 +432,274 @@ def favorite(request):
     :param request:
     :return:
     """
+    user = request.user
+
+    if request.method == "GET":
+        search = request.GET.get("search", "")
+        rows = favorite_rows_for_user(user, search=search)
+        return HttpResponse(
+            json.dumps(
+                {"status": 0, "msg": "ok", "data": rows},
+                cls=ExtendJSONEncoder,
+                bigint_as_string=True,
+            ),
+            content_type="application/json",
+        )
+
     query_log_id = request.POST.get("query_log_id")
+    favorite_id = request.POST.get("favorite_id")
     star = True if request.POST.get("star") == "true" else False
-    alias = request.POST.get("alias")
-    QueryLog(id=query_log_id, favorite=star, alias=alias).save(
-        update_fields=["favorite", "alias"]
-    )
+    alias = (request.POST.get("alias") or "").strip()
+    sql_content = (request.POST.get("sql_content") or "").strip()
+
+    if favorite_id:
+        try:
+            favorite_row = SqlQueryFavorite.objects.get(
+                id=favorite_id, username=user.username
+            )
+        except SqlQueryFavorite.DoesNotExist:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "收藏记录不存在"}),
+                content_type="application/json",
+            )
+        if not star:
+            favorite_row.delete()
+        else:
+            if not sql_content:
+                return HttpResponse(
+                    json.dumps({"status": 1, "msg": "SQL内容不能为空"}),
+                    content_type="application/json",
+                )
+            favorite_row.alias = alias[:64]
+            favorite_row.sql = sql_content
+            favorite_row.instance_name = request.POST.get("instance_name") or ""
+            favorite_row.db_name = request.POST.get("db_name") or ""
+            favorite_row.save()
+    elif query_log_id:
+        try:
+            query_log_filter = {"id": query_log_id}
+            if not (user.is_superuser or user.has_perm("sql.audit_user")):
+                query_log_filter["username"] = user.username
+            query_log = QueryLog.objects.exclude(alias=SQLQUERY_KNOWLEDGE_ALIAS).get(
+                **query_log_filter
+            )
+        except QueryLog.DoesNotExist:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "收藏记录不存在"}),
+                content_type="application/json",
+            )
+        if not star:
+            SqlQueryFavorite.objects.filter(
+                username=user.username, source_query_log_id=query_log.id
+            ).delete()
+        else:
+            favorite_row, _ = SqlQueryFavorite.objects.get_or_create(
+                username=user.username,
+                source_query_log_id=query_log.id,
+                defaults={
+                    "user_display": user.display,
+                    "alias": alias[:64],
+                    "sql": sql_content or query_log.sqllog,
+                    "instance_name": query_log.instance_name,
+                    "db_name": query_log.db_name,
+                },
+            )
+            favorite_row.alias = alias[:64]
+            favorite_row.sql = sql_content or query_log.sqllog
+            favorite_row.instance_name = query_log.instance_name
+            favorite_row.db_name = query_log.db_name
+            favorite_row.save()
+    else:
+        if not star:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "收藏记录不存在"}),
+                content_type="application/json",
+            )
+        if not sql_content:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "SQL内容不能为空"}),
+                content_type="application/json",
+            )
+        SqlQueryFavorite.objects.create(
+            username=user.username,
+            user_display=user.display,
+            db_name=request.POST.get("db_name") or "",
+            instance_name=request.POST.get("instance_name") or "",
+            sql=sql_content,
+            alias=alias[:64],
+        )
     # 返回查询结果
     return HttpResponse(
         json.dumps({"status": 0, "msg": "ok"}), content_type="application/json"
+    )
+
+
+@permission_required("sql.menu_sqlquery", raise_exception=True)
+def knowledge(request):
+    """
+    当前账号的 SQL 查询知识库。
+    :param request:
+    :return:
+    """
+    user = request.user
+
+    if request.method == "GET":
+        _migrate_legacy_knowledge(user)
+        search = request.GET.get("search", "")
+        engine = request.GET.get("engine", "")
+        scene = request.GET.get("scene", "")
+        knowledge_rows = SqlQueryKnowledge.objects.filter(
+            username=user.username,
+        )
+        if engine:
+            knowledge_rows = knowledge_rows.filter(
+                Q(engines__icontains=engine) | Q(engines__icontains="通用")
+            )
+        if scene:
+            knowledge_rows = knowledge_rows.filter(scene=scene)
+        if search:
+            knowledge_rows = knowledge_rows.filter(
+                Q(name__icontains=search)
+                | Q(scene__icontains=search)
+                | Q(engines__icontains=search)
+                | Q(sql__icontains=search)
+            )
+        rows = [
+            _knowledge_item_from_model(row)
+            for row in knowledge_rows.order_by("-sys_time", "-id")
+        ]
+        scenes = list(
+            SqlQueryKnowledge.objects.filter(username=user.username)
+            .exclude(scene="")
+            .order_by("scene")
+            .values_list("scene", flat=True)
+            .distinct()
+        )
+        return HttpResponse(
+            json.dumps(
+                {"status": 0, "msg": "ok", "data": rows, "scenes": scenes},
+                cls=ExtendJSONEncoder,
+                bigint_as_string=True,
+            ),
+            content_type="application/json",
+        )
+
+    action = request.POST.get("action", "add")
+    if action == "delete":
+        knowledge_id = request.POST.get("id")
+        if not knowledge_id or not str(knowledge_id).isdigit():
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "知识库记录不存在"}),
+                content_type="application/json",
+            )
+        deleted_count, _ = SqlQueryKnowledge.objects.filter(
+            id=knowledge_id, username=user.username
+        ).delete()
+        if not deleted_count:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "知识库记录不存在"}),
+                content_type="application/json",
+            )
+        return HttpResponse(
+            json.dumps({"status": 0, "msg": "ok"}), content_type="application/json"
+        )
+
+    source_knowledge = None
+    if action in ("edit", "copy"):
+        knowledge_id = request.POST.get("id")
+        try:
+            source_knowledge = SqlQueryKnowledge.objects.get(
+                id=knowledge_id, username=user.username
+            )
+        except SqlQueryKnowledge.DoesNotExist:
+            return HttpResponse(
+                json.dumps({"status": 1, "msg": "知识库记录不存在"}),
+                content_type="application/json",
+            )
+
+    name = (request.POST.get("name") or "").strip()
+    scene = (request.POST.get("scene") or "自定义").strip() or "自定义"
+    engines = _normalize_knowledge_engines(request.POST.getlist("engines[]"))
+    sql_content = (request.POST.get("sql") or "").strip()
+    if not name:
+        return HttpResponse(
+            json.dumps({"status": 1, "msg": "请输入名称"}),
+            content_type="application/json",
+        )
+    if not sql_content:
+        return HttpResponse(
+            json.dumps({"status": 1, "msg": "请输入SQL"}),
+            content_type="application/json",
+        )
+
+    if action == "edit" and source_knowledge:
+        source_knowledge.name = name[:64]
+        source_knowledge.scene = scene[:64]
+        source_knowledge.engines = ",".join(engines)
+        source_knowledge.sql = sql_content
+        source_knowledge.instance_name = request.POST.get("instance_name") or ""
+        source_knowledge.db_name = request.POST.get("db_name") or ""
+        source_knowledge.save()
+        knowledge_row = source_knowledge
+    else:
+        if action == "copy" and source_knowledge and not name.endswith(" 副本"):
+            name = f"{name} 副本"
+        knowledge_row = SqlQueryKnowledge.objects.create(
+            username=user.username,
+            user_display=user.display,
+            name=name[:64],
+            scene=scene[:64],
+            engines=",".join(engines),
+            sql=sql_content,
+            instance_name=request.POST.get("instance_name") or "",
+            db_name=request.POST.get("db_name") or "",
+        )
+    return HttpResponse(
+        json.dumps(
+            {
+                "status": 0,
+                "msg": "ok",
+                "data": _knowledge_item_from_model(knowledge_row),
+            },
+            cls=ExtendJSONEncoder,
+            bigint_as_string=True,
+        ),
+        content_type="application/json",
+    )
+
+
+@permission_required("sql.menu_sqlquery", raise_exception=True)
+def preference(request):
+    """SQL查询页账号级界面偏好"""
+    user = request.user
+    if request.method == "GET":
+        return HttpResponse(
+            json.dumps(
+                {
+                    "status": 0,
+                    "msg": "ok",
+                    "data": get_sqlquery_preference(user),
+                },
+                cls=ExtendJSONEncoder,
+                bigint_as_string=True,
+            ),
+            content_type="application/json",
+        )
+
+    if request.method == "POST":
+        preference_data = update_sqlquery_preference(user, request.POST)
+        return HttpResponse(
+            json.dumps(
+                {"status": 0, "msg": "ok", "data": preference_data},
+                cls=ExtendJSONEncoder,
+                bigint_as_string=True,
+            ),
+            content_type="application/json",
+        )
+
+    return HttpResponse(
+        json.dumps({"status": 1, "msg": "不支持的请求方法"}),
+        content_type="application/json",
     )
 
 

@@ -13,6 +13,9 @@ from django.views.decorators.cache import cache_page
 from common.utils.extend_json_encoder import ExtendJSONEncoder
 from common.utils.convert import Convert
 from sql.engines import get_engine
+from sql.engines.models import ResultSet
+from sql.tool_plugins import tool_plugin_enabled_required
+from sql.utils.pgsql_params import query_pgsql_params_for_instance
 from sql.plugins.schemasync import SchemaSync
 from sql.utils.sql_utils import filter_db_list
 from .models import Instance, ParamTemplate, ParamHistory
@@ -87,6 +90,17 @@ def param_list(request):
     except Instance.DoesNotExist:
         result = {"status": 1, "msg": "实例不存在", "data": []}
         return HttpResponse(json.dumps(result), content_type="application/json")
+    if ins.db_type == "pgsql":
+        try:
+            rows = query_pgsql_params_for_instance(ins, search=search, editable=editable)
+        except Exception as e:
+            result = {"status": 1, "msg": str(e), "data": []}
+            return HttpResponse(json.dumps(result), content_type="application/json")
+        return HttpResponse(
+            json.dumps(rows, cls=ExtendJSONEncoder, bigint_as_string=True),
+            content_type="application/json",
+        )
+
     # 获取已配置参数列表
     cnf_params = dict()
     for param in ParamTemplate.objects.filter(
@@ -208,6 +222,7 @@ def param_edit(request):
     return HttpResponse(json.dumps(result), content_type="application/json")
 
 
+@tool_plugin_enabled_required("schemasync")
 @permission_required("sql.menu_schemasync", raise_exception=True)
 def schemasync(request):
     """对比实例schema信息"""
@@ -309,7 +324,7 @@ def schemasync(request):
 @cache_page(60 * 5, key_prefix="insRes")
 def instance_resource(request):
     """
-    获取实例内的资源信息，database、schema、table、column
+    获取实例内的资源信息，database、schema、table、column、column_detail、index、overview、constraint、partition
     :param request:
     :return:
     """
@@ -355,6 +370,28 @@ def instance_resource(request):
             )
         elif resource_type == "column" and db_name and tb_name:
             resource = query_engine.get_all_columns_by_tb(
+                db_name=db_name, tb_name=tb_name, schema_name=schema_name
+            )
+        elif resource_type == "column_detail" and db_name and tb_name:
+            resource = query_engine.describe_table(
+                db_name=db_name, tb_name=tb_name, schema_name=schema_name
+            )
+        elif resource_type == "index" and db_name and tb_name:
+            resource = query_engine.get_table_index_data(
+                db_name=db_name, tb_name=tb_name, schema_name=schema_name
+            )
+            if isinstance(resource, dict):
+                resource = ResultSet(rows=resource.get("rows", []))
+        elif resource_type == "overview" and db_name and tb_name:
+            resource = query_engine.get_table_overview_data(
+                db_name=db_name, tb_name=tb_name, schema_name=schema_name
+            )
+        elif resource_type == "constraint" and db_name and tb_name:
+            resource = query_engine.get_table_constraint_data(
+                db_name=db_name, tb_name=tb_name, schema_name=schema_name
+            )
+        elif resource_type == "partition" and db_name and tb_name:
+            resource = query_engine.get_table_partition_data(
                 db_name=db_name, tb_name=tb_name, schema_name=schema_name
             )
         else:

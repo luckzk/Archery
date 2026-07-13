@@ -1,0 +1,18 @@
+<!-- PgSQL索引诊断的表格-->
+<div id="indexes" role="tabpanel" class="tab-pane fade table-responsive">
+    <div id="pgsql-indexes-toolbar" class="form-inline dbdiagnostic-filter-toolbar" style="display:none;">
+        <div class="form-group">
+            <label for="pgsql_indexes_db">数据库</label>
+            <select id="pgsql_indexes_db" class="form-control selectpicker" data-live-search="true" title="全部"></select>
+        </div>
+        <div class="form-group">
+            <label for="pgsql_indexes_schema">Schema</label>
+            <select id="pgsql_indexes_schema" class="form-control selectpicker" data-live-search="true" title="全部"></select>
+        </div>
+        <button id="pgsql_indexes_search" class="btn btn-default" type="button">查询</button>
+        <button id="pgsql_indexes_reset" class="btn btn-default" type="button">重置</button>
+    </div>
+    <table id="indexes-list" data-toggle="table" class="table table-hover"
+           style="table-layout:inherit;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
+    </table>
+</div>
