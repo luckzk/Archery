@@ -321,6 +321,79 @@ class TableInstanceLookupResponseSerializer(serializers.Serializer):
     summary = LocatorExecutionSummarySerializer(required=False, allow_null=True)
 
 
+class SqlQueryInstancesQuerySerializer(serializers.Serializer):
+    type = serializers.CharField(required=False, allow_blank=True)
+    db_type = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True
+    )
+    tag_codes = serializers.ListField(
+        child=serializers.CharField(), required=False, allow_empty=True
+    )
+
+
+class SqlQueryResourceQuerySerializer(serializers.Serializer):
+    instance_id = serializers.IntegerField(required=False)
+    instance_name = serializers.CharField(required=False, allow_blank=True)
+    resource_type = serializers.ChoiceField(
+        choices=["database", "schema", "table", "column"]
+    )
+    db_name = serializers.CharField(required=False, allow_blank=True)
+    schema_name = serializers.CharField(required=False, allow_blank=True)
+    tb_name = serializers.CharField(required=False, allow_blank=True)
+
+    def validate(self, attrs):
+        if not attrs.get("instance_id") and not attrs.get("instance_name"):
+            raise serializers.ValidationError(
+                "instance_id 或 instance_name 必须提供一个"
+            )
+        resource_type = attrs.get("resource_type")
+        if resource_type in ("table", "schema") and not attrs.get("db_name"):
+            raise serializers.ValidationError("db_name 不能为空")
+        if resource_type == "column" and (
+            not attrs.get("db_name") or not attrs.get("tb_name")
+        ):
+            raise serializers.ValidationError("column 查询需提供 db_name 和 tb_name")
+        return attrs
+
+
+class SqlQueryDescribeTableSerializer(serializers.Serializer):
+    instance_name = serializers.CharField()
+    db_name = serializers.CharField()
+    tb_name = serializers.CharField()
+    schema_name = serializers.CharField(required=False, allow_blank=True, default="")
+
+
+class SqlQueryExecuteSerializer(serializers.Serializer):
+    instance_name = serializers.CharField()
+    db_name = serializers.CharField()
+    schema_name = serializers.CharField(required=False, allow_blank=True)
+    tb_name = serializers.CharField(required=False, allow_blank=True)
+    sql_content = serializers.CharField()
+    limit_num = serializers.IntegerField(min_value=0)
+
+
+class SqlQueryLogsQuerySerializer(serializers.Serializer):
+    limit = serializers.IntegerField(required=False, default=0, min_value=0)
+    offset = serializers.IntegerField(required=False, default=0, min_value=0)
+    search = serializers.CharField(required=False, allow_blank=True, default="")
+    star = serializers.CharField(required=False, allow_blank=True, default="")
+    query_log_id = serializers.IntegerField(required=False)
+    start_date = serializers.CharField(required=False, allow_blank=True, default="")
+    end_date = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_star(self, value):
+        return str(value).lower() == "true"
+
+
+class SqlQueryFavoriteSerializer(serializers.Serializer):
+    query_log_id = serializers.IntegerField(min_value=1)
+    star = serializers.CharField()
+    alias = serializers.CharField(required=False, allow_blank=True, default="")
+
+    def validate_star(self, value):
+        return str(value).lower() == "true"
+
+
 class ExecuteCheckSerializer(serializers.Serializer):
     instance_id = serializers.IntegerField(label="实例id")
     db_name = serializers.CharField(label="数据库名")
@@ -411,13 +484,13 @@ class WorkflowContentSerializer(serializers.ModelSerializer):
             user = self.context["request"].user
 
         # 验证提交用户的组权限（用户是否在该组、该组是否有指定实例）
+        tag_codes = (
+            ["can_read"] if workflow_data["is_offline_export"] else ["can_write"]
+        )
         try:
-            user_instances(user, tag_codes=["can_write"]).get(id=instance.id)
+            user_instances(user, tag_codes=tag_codes).get(id=instance.id)
         except instance.DoesNotExist:
-            if workflow_data["is_offline_export"]:
-                pass
-            else:
-                raise serializers.ValidationError({"errors": "你所在组未关联该实例！"})
+            raise serializers.ValidationError({"errors": "你所在组未关联该实例！"})
 
         # 再次交给engine进行检测，防止绕过
         try:
@@ -425,7 +498,7 @@ class WorkflowContentSerializer(serializers.ModelSerializer):
             sql_export = OffLineDownLoad()
             if workflow_data["is_offline_export"]:
                 instance.sql_content = sql_content
-                instance.db_name = workflow_data["db_name"]
+                instance.selected_db_name = workflow_data["db_name"]
                 check_result = sql_export.pre_count_check(workflow=instance)
             else:
                 check_result = check_engine.execute_check(
@@ -436,13 +509,13 @@ class WorkflowContentSerializer(serializers.ModelSerializer):
 
         # 未开启备份选项，并且engine支持备份，强制设置备份
         is_backup = (
-            workflow_data["is_backup"] if "is_backup" in workflow_data.keys() else False
+            False
+            if workflow_data["is_offline_export"]
+            else workflow_data.get("is_backup", False)
         )
         sys_config = SysConfig()
         if not sys_config.get("enable_backup_switch") and check_engine.auto_backup:
-            if workflow_data["is_offline_export"]:
-                pass
-            else:
+            if not workflow_data["is_offline_export"]:
                 is_backup = True
 
         workflow_data.update(

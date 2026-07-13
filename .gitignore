@@ -5,6 +5,8 @@
 *.log
 .idea/
 .DS_Store
+Thumbs.db
+*.tmp
 archery/settings.py.github
 archery/settings.py.dev
 archery/settings_dev.py
@@ -12,12 +14,17 @@ sql/migrations/
 venv
 .venv/
 env
+.venv/
+__pycache__/
+dist/
+*.egg-info/
 sonar-project.properties
 .scannerwork
 .env
 local_settings.py
 src/docker-compose-dev
 .coverage
+coverage.xml
 archery_custom
 static/
 !common/static/

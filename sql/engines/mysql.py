@@ -765,7 +765,14 @@ class MysqlEngine(EngineBase):
             conn.autocommit(True)
             cursor = conn.cursor(cursorclass)
             try:
-                cursor.execute(f"set session max_execution_time={max_execution_time};")
+                if self.server_fork_type == MysqlForkType.MARIADB:
+                    cursor.execute(
+                        f"set session max_statement_time={max_execution_time / 1000};"
+                    )
+                else:
+                    cursor.execute(
+                        f"set session max_execution_time={max_execution_time};"
+                    )
             except MySQLdb.OperationalError:
                 pass
             effect_row = cursor.execute(sql, parameters)
@@ -986,12 +993,7 @@ class MysqlEngine(EngineBase):
                 if isinstance(variables, list)
                 else "','".join(list(variables))
             )
-            db = (
-                "performance_schema"
-                if self.server_version > (5, 7)
-                else "information_schema"
-            )
-            sql = f"""select * from {db}.global_variables where variable_name in ('{variables}');"""
+            sql = f"""show global variables where variable_name in ('{variables}');"""
         else:
             sql = "show global variables;"
         return self.query(sql=sql)
@@ -1058,8 +1060,14 @@ class MysqlEngine(EngineBase):
             kill_sql = kill_sql + row[0]
         return self.execute("information_schema", kill_sql)
 
-    def tablespace(self, offset=0, row_count=14):
+    def tablespace(self, offset=0, row_count=14, schema_search=""):
         """获取表空间信息"""
+        search_condition = ""
+        if schema_search:
+            search_escaped = self.escape_string(schema_search)
+            search_condition = " AND (table_schema LIKE '%{keyword}%' OR table_name LIKE '%{keyword}%')".format(
+                keyword=search_escaped
+            )
         sql = """
         SELECT
           table_schema AS table_schema,
@@ -1072,17 +1080,25 @@ class MysqlEngine(EngineBase):
           TRUNCATE(data_free/1024/1024,2) AS data_free,
           TRUNCATE(data_free/(data_length+index_length+data_free)*100,2) AS pct_free
         FROM information_schema.tables 
-        WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'test', 'sys')
+        WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'test', 'sys'){search_condition}
           ORDER BY total_size DESC 
-        LIMIT {},{};""".format(offset, row_count)
+        LIMIT {},{};""".format(offset, row_count, search_condition=search_condition)
         return self.query("information_schema", sql)
 
-    def tablespace_count(self):
+    def tablespace_count(self, schema_search=""):
         """获取表空间数量"""
+        search_condition = ""
+        if schema_search:
+            search_escaped = self.escape_string(schema_search)
+            search_condition = " AND (table_schema LIKE '%{keyword}%' OR table_name LIKE '%{keyword}%')".format(
+                keyword=search_escaped
+            )
         sql = """
         SELECT count(*)
         FROM information_schema.tables 
-        WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'test', 'sys')"""
+        WHERE table_schema NOT IN ('information_schema', 'performance_schema', 'mysql', 'test', 'sys'){search_condition}""".format(
+            search_condition=search_condition
+        )
         return self.query("information_schema", sql)
 
     def trxandlocks(self):

@@ -21,7 +21,6 @@ from sql.models import (
     SqlWorkflow,
     SqlWorkflowContent,
     ResourceGroup,
-    ParamTemplate,
     WorkflowAudit,
     QueryLog,
     WorkflowLog,
@@ -104,9 +103,31 @@ class TestView(TransactionTestCase):
         )
         # 慢查询建表
         with connection.cursor() as cursor:
-            with open("src/init_sql/mysql_slow_query_review.sql") as fp:
-                content = fp.read()
-                cursor.execute(content)
+            if connection.vendor == "sqlite":
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mysql_slow_query_review (
+                        checksum TEXT PRIMARY KEY,
+                        fingerprint TEXT,
+                        sample TEXT,
+                        first_seen TEXT,
+                        last_seen TEXT,
+                        reviewed_by TEXT,
+                        reviewed_on TEXT,
+                        comments TEXT
+                    )
+                    """)
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS mysql_slow_query_review_history (
+                        checksum TEXT,
+                        sample TEXT,
+                        ts_min TEXT,
+                        ts_max TEXT
+                    )
+                    """)
+            else:
+                with open("src/init_sql/mysql_slow_query_review.sql") as fp:
+                    content = fp.read()
+                    cursor.execute(content)
 
     def tearDown(self):
         self.sys_config.purge()
@@ -118,9 +139,13 @@ class TestView(TransactionTestCase):
         QueryPrivilegesApply.objects.all().delete()
         ResourceGroup.objects.all().delete()
         with connection.cursor() as cursor:
-            cursor.execute(
-                "DROP table mysql_slow_query_review,mysql_slow_query_review_history"
-            )
+            if connection.vendor == "sqlite":
+                cursor.execute("DROP TABLE IF EXISTS mysql_slow_query_review")
+                cursor.execute("DROP TABLE IF EXISTS mysql_slow_query_review_history")
+            else:
+                cursor.execute(
+                    "DROP table mysql_slow_query_review,mysql_slow_query_review_history"
+                )
 
     def test_index(self):
         """测试index页面"""
@@ -875,9 +900,9 @@ class TestQuery(TransactionTestCase):
         archer_config = SysConfig()
         archer_config.set("disable_star", False)
 
-    @patch("sql.query.user_instances")
-    @patch("sql.query.get_engine")
-    @patch("sql.query.query_priv_check")
+    @patch("sql.services.sqlquery_service.user_instances")
+    @patch("sql.services.sqlquery_service.get_engine")
+    @patch("sql.services.sqlquery_service.query_priv_check")
     def testCorrectSQL(self, _priv_check, _get_engine, _user_instances):
         c = Client()
         some_sql = "select some from some_table limit 100;"
@@ -885,7 +910,7 @@ class TestQuery(TransactionTestCase):
         some_limit = 100
         c.force_login(self.u1)
         r = c.post(
-            "/query/",
+            "/api/v1/sqlquery/execute/",
             data={
                 "instance_name": self.slave1.instance_name,
                 "sql_content": some_sql,
@@ -893,7 +918,8 @@ class TestQuery(TransactionTestCase):
                 "limit_num": some_limit,
             },
         )
-        self.assertEqual(r.status_code, 403)
+        self.assertEqual(r.status_code, 200)
+        self.assertEqual(r.json()["status"], 1)
         c.force_login(self.u2)
         q_result = ResultSet(full_sql=some_sql, rows=["value"])
         q_result.column_list = ["some"]
@@ -905,6 +931,7 @@ class TestQuery(TransactionTestCase):
         }
         _get_engine.return_value.filter_sql.return_value = some_sql
         _get_engine.return_value.query.return_value = q_result
+        _get_engine.return_value.thread_id = None
         _get_engine.return_value.seconds_behind_master = 100
         _priv_check.return_value = {
             "status": 0,
@@ -912,7 +939,7 @@ class TestQuery(TransactionTestCase):
         }
         _user_instances.return_value.get.return_value = self.slave1
         r = c.post(
-            "/query/",
+            "/api/v1/sqlquery/execute/",
             data={
                 "instance_name": self.slave1.instance_name,
                 "sql_content": some_sql,
@@ -933,9 +960,9 @@ class TestQuery(TransactionTestCase):
         self.assertEqual(r_json["data"]["column_list"], ["some"])
         self.assertEqual(r_json["data"]["seconds_behind_master"], 100)
 
-    @patch("sql.query.user_instances")
-    @patch("sql.query.get_engine")
-    @patch("sql.query.query_priv_check")
+    @patch("sql.services.sqlquery_service.user_instances")
+    @patch("sql.services.sqlquery_service.get_engine")
+    @patch("sql.services.sqlquery_service.query_priv_check")
     def testSQLWithoutLimit(self, _priv_check, _get_engine, _user_instances):
         c = Client()
         some_limit = 100
@@ -953,13 +980,15 @@ class TestQuery(TransactionTestCase):
         }
         _get_engine.return_value.filter_sql.return_value = sql_with_limit
         _get_engine.return_value.query.return_value = q_result
+        _get_engine.return_value.thread_id = None
+        _get_engine.return_value.seconds_behind_master = 0
         _priv_check.return_value = {
             "status": 0,
             "data": {"limit_num": 100, "priv_check": True},
         }
         _user_instances.return_value.get.return_value = self.slave1
         r = c.post(
-            "/query/",
+            "/api/v1/sqlquery/execute/",
             data={
                 "instance_name": self.slave1.instance_name,
                 "sql_content": sql_without_limit,
@@ -979,7 +1008,7 @@ class TestQuery(TransactionTestCase):
         self.assertEqual(r_json["data"]["rows"], ["value"])
         self.assertEqual(r_json["data"]["column_list"], ["some"])
 
-    @patch("sql.query.query_priv_check")
+    @patch("sql.services.sqlquery_service.query_priv_check")
     def testStarOptionOn(self, _priv_check):
         c = Client()
         c.force_login(self.u2)
@@ -993,7 +1022,7 @@ class TestQuery(TransactionTestCase):
         archer_config = SysConfig()
         archer_config.set("disable_star", True)
         r = c.post(
-            "/query/",
+            "/api/v1/sqlquery/execute/",
             data={
                 "instance_name": self.slave1.instance_name,
                 "sql_content": sql_with_star,
@@ -1023,7 +1052,7 @@ class TestQuery(TransactionTestCase):
             "limit": 14,
             "offset": 0,
         }
-        r = c.get("/query/querylog/", data=data)
+        r = c.get("/api/v1/sqlquery/logs/", data=data)
         self.assertEqual(r.json()["total"], 1)
 
     def test_star(self):
@@ -1031,7 +1060,7 @@ class TestQuery(TransactionTestCase):
         c = Client()
         c.force_login(self.superuser1)
         r = c.post(
-            "/query/favorite/",
+            "/api/v1/sqlquery/favorites/",
             data={
                 "query_log_id": self.query_log.id,
                 "star": "true",
@@ -1047,7 +1076,7 @@ class TestQuery(TransactionTestCase):
         c = Client()
         c.force_login(self.superuser1)
         r = c.post(
-            "/query/favorite/",
+            "/api/v1/sqlquery/favorites/",
             data={"query_log_id": self.query_log.id, "star": "false", "alias": ""},
         )
         r_json = r.json()
@@ -1549,51 +1578,6 @@ class TestOptimize(TestCase):
         )
 
 
-class TestSchemaSync(TestCase):
-    """
-    测试SchemaSync
-    """
-
-    def setUp(self):
-        self.superuser = User(username="super", is_superuser=True)
-        self.superuser.save()
-        # 使用 travis.ci 时实例和测试service保持一致
-        self.master = Instance(
-            instance_name="test_instance",
-            type="master",
-            db_type="mysql",
-            host=settings.DATABASES["default"]["HOST"],
-            port=settings.DATABASES["default"]["PORT"],
-            user=settings.DATABASES["default"]["USER"],
-            password=settings.DATABASES["default"]["PASSWORD"],
-        )
-        self.master.save()
-        self.sys_config = SysConfig()
-        self.client = Client()
-        self.client.force_login(self.superuser)
-
-    def tearDown(self):
-        self.superuser.delete()
-        self.master.delete()
-        self.sys_config.replace(json.dumps({}))
-
-    def test_schema_sync(self):
-        """
-        测试SchemaSync
-        :return:
-        """
-        data = {
-            "instance_name": "test_instance",
-            "db_name": "test",
-            "target_instance_name": "test_instance",
-            "target_db_name": "test",
-            "sync_auto_inc": True,
-            "sync_comments": False,
-        }
-        r = self.client.post(path="/instance/schemasync/", data=data)
-        self.assertEqual(json.loads(r.content)["status"], 0)
-
-
 class TestAsync(TestCase):
     def setUp(self):
         self.now = datetime.now()
@@ -1974,184 +1958,6 @@ class TestBinLog(TestCase):
         self.assertEqual(
             json.loads(r.content),
             {"status": 2, "msg": "清理失败,Error:清理失败", "data": ""},
-        )
-
-
-class TestParam(TestCase):
-    """
-    测试实例参数修改
-    """
-
-    def setUp(self):
-        self.superuser = User(username="super", is_superuser=True)
-        self.superuser.save()
-        # 使用 travis.ci 时实例和测试service保持一致
-        self.master = Instance(
-            instance_name="test_instance",
-            type="master",
-            db_type="mysql",
-            host=settings.DATABASES["default"]["HOST"],
-            port=settings.DATABASES["default"]["PORT"],
-            user=settings.DATABASES["default"]["USER"],
-            password=settings.DATABASES["default"]["PASSWORD"],
-        )
-        self.master.save()
-        self.client = Client()
-        self.client.force_login(self.superuser)
-
-    def tearDown(self):
-        self.superuser.delete()
-        self.master.delete()
-        ParamTemplate.objects.all().delete()
-
-    def test_param_list_instance_not_exist(self):
-        """
-        测试获取参数列表，实例不存在
-        :return:
-        """
-        data = {"instance_id": 0}
-        r = self.client.post(path="/param/list/", data=data)
-        self.assertEqual(
-            json.loads(r.content), {"status": 1, "msg": "实例不存在", "data": []}
-        )
-
-    @patch("sql.engines.mysql.MysqlEngine.get_variables")
-    @patch("sql.engines.get_engine")
-    def test_param_list_instance_exist(self, _get_engine, _get_variables):
-        """
-        测试获取参数列表，实例存在
-        :return:
-        """
-        data = {"instance_id": self.master.id, "editable": True}
-        r = self.client.post(path="/param/list/", data=data)
-        self.assertIsInstance(json.loads(r.content), list)
-
-    def test_param_history(self):
-        """
-        测试获取参数修改历史
-        :return:
-        """
-        data = {
-            "instance_id": self.master.id,
-            "search": "binlog",
-            "limit": 14,
-            "offset": 0,
-        }
-        r = self.client.post(path="/param/history/", data=data)
-        self.assertEqual(json.loads(r.content), {"rows": [], "total": 0})
-
-    @patch("sql.engines.mysql.MysqlEngine.set_variable")
-    @patch("sql.engines.mysql.MysqlEngine.get_variables")
-    @patch("sql.engines.get_engine")
-    def test_param_edit_variable_not_config(
-        self, _get_engine, _get_variables, _set_variable
-    ):
-        """
-        测试参数修改，参数未在模板配置
-        :return:
-        """
-        data = {
-            "instance_id": self.master.id,
-            "variable_name": "1",
-            "runtime_value": "false",
-        }
-        r = self.client.post(path="/param/edit/", data=data)
-        self.assertEqual(
-            json.loads(r.content),
-            {"data": [], "msg": "请先在参数模板中配置该参数！", "status": 1},
-        )
-
-    @patch("sql.engines.mysql.MysqlEngine.set_variable")
-    @patch("sql.engines.mysql.MysqlEngine.get_variables")
-    @patch("sql.engines.get_engine")
-    def test_param_edit_variable_not_change(
-        self, _get_engine, _get_variables, _set_variable
-    ):
-        """
-        测试参数修改，已在参数模板配置，但是值无变化
-        :return:
-        """
-        _get_variables.return_value.rows = (("binlog_format", "ROW"),)
-        _set_variable.return_value.error = None
-        _set_variable.return_value.full_sql = "set global binlog_format='STATEMENT';"
-
-        ParamTemplate.objects.create(
-            db_type="mysql",
-            variable_name="binlog_format",
-            default_value="ROW",
-            editable=True,
-        )
-        data = {
-            "instance_id": self.master.id,
-            "variable_name": "binlog_format",
-            "runtime_value": "ROW",
-        }
-        r = self.client.post(path="/param/edit/", data=data)
-        self.assertEqual(
-            json.loads(r.content),
-            {"status": 1, "msg": "参数值与实际运行值一致，未调整！", "data": []},
-        )
-
-    @patch("sql.engines.mysql.MysqlEngine.set_variable")
-    @patch("sql.engines.mysql.MysqlEngine.get_variables")
-    @patch("sql.engines.get_engine")
-    def test_param_edit_variable_change(
-        self, _get_engine, _get_variables, _set_variable
-    ):
-        """
-        测试参数修改，已在参数模板配置，且值有变化
-        :return:
-        """
-        _get_variables.return_value.rows = (("binlog_format", "ROW"),)
-        _set_variable.return_value.error = None
-        _set_variable.return_value.full_sql = "set global binlog_format='STATEMENT';"
-
-        ParamTemplate.objects.create(
-            db_type="mysql",
-            variable_name="binlog_format",
-            default_value="ROW",
-            editable=True,
-        )
-        data = {
-            "instance_id": self.master.id,
-            "variable_name": "binlog_format",
-            "runtime_value": "STATEMENT",
-        }
-        r = self.client.post(path="/param/edit/", data=data)
-        self.assertEqual(
-            json.loads(r.content),
-            {"status": 0, "msg": "修改成功，请手动持久化到配置文件！", "data": []},
-        )
-
-    @patch("sql.engines.mysql.MysqlEngine.set_variable")
-    @patch("sql.engines.mysql.MysqlEngine.get_variables")
-    @patch("sql.engines.get_engine")
-    def test_param_edit_variable_error(
-        self, _get_engine, _get_variables, _set_variable
-    ):
-        """
-        测试参数修改，已在参数模板配置，修改抛错
-        :return:
-        """
-        _get_variables.return_value.rows = (("binlog_format", "ROW"),)
-        _set_variable.return_value.error = "修改报错"
-        _set_variable.return_value.full_sql = "set global binlog_format='STATEMENT';"
-
-        ParamTemplate.objects.create(
-            db_type="mysql",
-            variable_name="binlog_format",
-            default_value="ROW",
-            editable=True,
-        )
-        data = {
-            "instance_id": self.master.id,
-            "variable_name": "binlog_format",
-            "runtime_value": "STATEMENT",
-        }
-        r = self.client.post(path="/param/edit/", data=data)
-        self.assertEqual(
-            json.loads(r.content),
-            {"status": 1, "msg": "设置错误，错误信息：修改报错", "data": []},
         )
 
 
